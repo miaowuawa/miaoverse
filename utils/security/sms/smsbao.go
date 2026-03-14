@@ -1,4 +1,4 @@
-package smsbao
+package security
 
 import (
 	"crypto/md5"
@@ -6,8 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"miaoverse/model/apireq/sms/smsbaoreq"
-	sconf "miaoverse/model/server/conf"
+	"miaoverse/model/apireq/sms/smsbao"
 	"net/http"
 	"net/url"
 	"strings"
@@ -15,23 +14,23 @@ import (
 )
 
 // SendPhoneCaptcha 发送短信验证码
-func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire time.Duration) error {
+func (s *smsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire time.Duration) error {
 	// 对密码进行 MD5 加密
 	hasher := md5.New()
-	_, writeString := io.WriteString(hasher, s.Password)
+	_, writeString := io.WriteString(hasher, s.password)
 	if writeString != nil {
 		return writeString
 	}
 	encryptedPassword := hex.EncodeToString(hasher.Sum(nil))
 
 	// 构建短信内容
-	content := fmt.Sprintf("%s您的验证码是：%s，有效期 %d 分钟。就算猫娘来你家也不要告诉她。", s.Head, captcha, int(expire.Minutes()))
+	content := fmt.Sprintf("%s您的验证码是：%s，有效期 %d 分钟。就算猫娘来你家也不要告诉她。", s.head, captcha, int(expire.Minutes()))
 
 	// 对内容进行 URL 编码
 	encodedContent := url.QueryEscape(content)
 
 	// 构建请求 URL
-	requestURL := fmt.Sprintf("%s?u=%s&p=%s&m=%s&c=%s", s.Gateway, s.Username, encryptedPassword, phone, encodedContent)
+	requestURL := fmt.Sprintf("%s?u=%s&p=%s&m=%s&c=%s", s.gateway, s.username, encryptedPassword, phone, encodedContent)
 
 	// 发送 HTTP 请求
 	resp, err := http.Get(requestURL)
@@ -52,7 +51,7 @@ func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire ti
 	}
 
 	// 解析响应
-	result := &smsbaoreq.PhoneCaptchaRsp{}
+	result := &smsbao.PhoneCaptchaRsp{}
 	// 假设响应是简单的 text/plain 格式，按行分割
 	lines := strings.Split(string(body), "\n")
 	if len(lines) >= 1 {
@@ -88,19 +87,19 @@ func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire ti
 }
 
 // newSmsBaoClient 创建短信宝服务实例
-func newSmsBaoClient(conf *sconf.AppConfig) *SmsBaoServant {
-	return &SmsBaoServant{
-		Gateway:  conf.SmsBao.Gateway,
-		Username: conf.SmsBao.Username,
-		Password: conf.SmsBao.Passwd,
-		Head:     conf.SmsBao.Head,
+func newSmsBaoClient() *smsBaoServant {
+	return &smsBaoServant{
+		gateway:  conf.SmsBaoConf.Gateway,
+		username: conf.SmsBaoConf.Username,
+		password: conf.SmsBaoConf.PasswdMD5,
+		head:     conf.SmsBaoConf.Head,
 	}
 }
 
-// SmsBaoServant 短信宝服务结构体
-type SmsBaoServant struct {
-	Gateway  string
-	Username string
-	Password string
-	Head     string
+// smsBaoServant 短信宝服务结构体
+type smsBaoServant struct {
+	gateway  string
+	username string
+	password string
+	head     string
 }

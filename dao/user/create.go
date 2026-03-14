@@ -6,7 +6,7 @@ import (
 
 func (d *UserDAO) Create(user *user.User, credential *user.UserCredential) (uint64, error) {
 
-	// 开启事务（保证用户和凭证同时创建/回滚）
+	// 开启事务
 	tx := d.DB.Begin()
 	defer func() {
 		if r := recover(); r != nil {

@@ -24,7 +24,7 @@ CREATE TABLE `user_credentials` (
 type UserCredential struct {
 	ID              uint64    `gorm:"primaryKey"`                                                     // 凭证ID
 	UserID          uint64    `gorm:"not null"`                                                       // 关联user.id
-	CredentialType  uint8     `gorm:"not null"`                                                       // 凭证类型 1-密码 3-第三方登录
+	CredentialType  uint8     `gorm:"not null"`                                                       // 凭证类型 1-密码 2-手机验证 3-第三方登录
 	CredentialKey   string    `gorm:"not null"`                                                       // 通行密钥ID/手机号/第三方平台（如wechat）
 	CredentialValue string    `gorm:"not null"`                                                       // 凭证值 密码bcrypt/第三方openid等
 	CredentialExt   string    `gorm:"default:''"`                                                     // 扩展字段（JSON格式，存非核心参数）

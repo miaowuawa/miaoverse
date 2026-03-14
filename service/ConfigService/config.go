@@ -1,10 +1,9 @@
-package config
+package ConfigService
 
 import (
 	"fmt"
 	"miaoverse/model/server/conf"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
 
@@ -29,13 +28,13 @@ func InitConfig(configPath string) (error, *conf.AppConfig) {
 	}
 
 	// （可选）监听本地配置文件变化，实现简单热更新
-	viper.WatchConfig()
-	viper.OnConfigChange(func(e fsnotify.Event) {
-		fmt.Println("本地配置文件更新，重新加载...")
-		if err := viper.Unmarshal(&GlobalConfig); err != nil {
-			fmt.Printf("配置热更新失败: %v\n", err)
-		}
-	})
+	//viper.WatchConfig()
+	//viper.OnConfigChange(func(e fsnotify.Event) {
+	//	fmt.Println("本地配置文件更新，重新加载...")
+	//	if err := viper.Unmarshal(&GlobalConfig); err != nil {
+	//		fmt.Printf("配置热更新失败: %v\n", err)
+	//	}
+	//})
 
 	fmt.Println("本地配置初始化成功！")
 	return nil, GlobalConfig

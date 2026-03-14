@@ -10,8 +10,8 @@ func generateCode() int {
 	return maths.RandomIntLimited(100000, 999999)
 }
 
-// GetCodeForPhone 为一个手机号准备一个验证码，返回成功/失败河验证码uuid
-func (c *CodeManager) GetCodeForPhone(region string, phone string) (error, string, string) {
+// PrepareCodeForPhone 为一个手机号准备一个验证码，返回成功/失败和验证码uuid
+func (c *CodeManager) PrepareCodeForPhone(region string, phone string) (error, string, string) {
 	codeUUID := utils.UUID()
 	codeID := codeUUID + md5hash.HashStr(region+phone)
 	//TODO:启动事务
