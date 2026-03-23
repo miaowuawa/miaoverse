@@ -30,9 +30,9 @@ func ConfToServants(conf *conf.AppConfig) (error, *server.Servants) {
 	})
 
 	smsRedisCtx := context.Background()
-	cacheRedisCtx := context.Background()
+	sessionCacheRedisCtx := context.Background()
 
-	cache := storage.NewFromConnection(cacheRedisClient.(redis.UniversalClient))
+	sessionCache := storage.NewFromConnection(cacheRedisClient.(redis.UniversalClient))
 
 	status := smsRedisClient.Ping(smsRedisCtx)
 	if status.Err() != nil {
