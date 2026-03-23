@@ -2,13 +2,16 @@ package ConfigService
 
 import (
 	"context"
-	"github.com/go-redis/redis/v8"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
 	"miaoverse/service/security/sms/codemanager"
 	"miaoverse/service/security/sms/smsbao"
 	"strconv"
 	"time"
+
+	storage "github.com/gofiber/storage/redis/v3"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func ConfToServants(conf *conf.AppConfig) (error, *server.Servants) {
@@ -18,7 +21,18 @@ func ConfToServants(conf *conf.AppConfig) (error, *server.Servants) {
 		Addr:     conf.Redis.Host + ":" + strconv.Itoa(conf.Redis.Port),
 		DB:       conf.SmsBao.DB,
 	})
+
+	// 1. 创建 UniversalClient（仅改这一行，参数和 NewClient 几乎一样）
+	cacheRedisClient := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:    []string{conf.Redis.Host + ":" + strconv.Itoa(conf.Redis.Port)}, // 单机填一个地址即可
+		Password: conf.Redis.Password,
+		DB:       conf.SmsBao.DB,
+	})
+
 	smsRedisCtx := context.Background()
+	cacheRedisCtx := context.Background()
+
+	cache := storage.NewFromConnection(cacheRedisClient.(redis.UniversalClient))
 
 	status := smsRedisClient.Ping(smsRedisCtx)
 	if status.Err() != nil {

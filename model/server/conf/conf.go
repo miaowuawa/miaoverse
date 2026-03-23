@@ -28,4 +28,7 @@ type AppConfig struct {
 		Head     string `yaml:"head"`
 		DB       int    `yaml:"dbnum"`
 	} `yaml:"smsbao"`
+	Cache struct {
+		DB int `yaml:"dbnum"`
+	}
 }

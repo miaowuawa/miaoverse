@@ -21,14 +21,16 @@ CREATE TABLE `user_credentials` (
                                     `last_login_at` datetime DEFAULT NULL COMMENT '最后登录时间',
                                     `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                     `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    -- 1. 补充缺失的逗号 + 修正约束逻辑（保留核心的 uk_user_id_type_key）
                                     UNIQUE KEY `uk_user_id_type_key` (`user_id`,`credential_type`,`credential_key`) COMMENT '唯一约束：一个用户同类型凭证只能绑定一个key（如一个手机号）',
                                     KEY `idx_user_id` (`user_id`),
-                                    KEY `idx_type_key` (`credential_type`,`credential_key`) COMMENT '按类型+key查（如手机号查所有用户）'
+                                    KEY `idx_type_key` (`credential_type`,`credential_key`) COMMENT '按类型+key查（如手机号查所有用户）',
+    -- 2. 补充主键前的逗号
                                     PRIMARY KEY (`id`),
-                                    UNIQUE KEY `uk_user_id_type` (`user_id`,`credential_type`) COMMENT '一个用户一种凭证类型只能有一条',
-                                    KEY `idx_user_id` (`user_id`)
-                                    CONSTRAINT `fk_uc_user_id` FOREIGN KEY (`user_id`) 
-                                        REFERENCES `user` (`id`) 
-                                        ON DELETE CASCADE  -- 级联删除：删用户时自动删其凭证（重点！）
-                                        ON UPDATE CASCADE  -- 级联更新：若user.id变更（极少用），自动同步
+    -- 3. 移除冲突的 uk_user_id_type 约束（保留核心即可）
+    -- 4. 修复外键：给保留字 user 加反引号
+                                    CONSTRAINT `fk_uc_user_id` FOREIGN KEY (`user_id`)
+                                        REFERENCES `user` (`id`)
+                                        ON DELETE CASCADE  -- 级联删除：删用户时自动删其凭证
+                                        ON UPDATE CASCADE  -- 级联更新：user.id变更时同步
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户凭证/密码表';

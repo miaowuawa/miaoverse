@@ -1,9 +1,10 @@
 package codemanager
 
 import (
+	"miaoverse/utils/encrypt/md5hash"
+	"miaoverse/utils/maths"
+
 	"github.com/gofiber/utils/v2"
-	"miaoverse/util/encrypt/md5hash"
-	"miaoverse/util/maths"
 )
 
 func generateCode() int {
