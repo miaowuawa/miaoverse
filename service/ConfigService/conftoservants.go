@@ -30,7 +30,6 @@ func ConfToServants(conf *conf.AppConfig) (error, *server.Servants) {
 	})
 
 	smsRedisCtx := context.Background()
-	sessionCacheRedisCtx := context.Background()
 
 	sessionCache := storage.NewFromConnection(cacheRedisClient.(redis.UniversalClient))
 
