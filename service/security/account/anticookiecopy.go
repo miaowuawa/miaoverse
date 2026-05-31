@@ -5,6 +5,7 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/session"
 	"log"
 	"miaoverse/model/dto/resp"
+	"miaoverse/service/i18n"
 )
 
 func AntiCookieCopy(c fiber.Ctx) error {
@@ -40,7 +41,7 @@ func AntiCookieCopy(c fiber.Ctx) error {
 		// ③ 返回 403 响应并终止请求（关键：return 而非 _）
 		return c.Status(fiber.StatusForbidden).JSON(resp.CodeWithMsg{
 			Code: fiber.StatusForbidden,
-			Msg:  "登录环境变化，请重新登录！",
+			Msg:  i18n.Message(c, i18n.ErrLoginEnvironmentChange),
 		})
 	}
 

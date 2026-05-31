@@ -1,0 +1,24 @@
+language = "zh-CN"
+
+[messages]
+"error.bad_request" = "请求错误，请检查参数"
+"error.request_timeout" = "请求超时，请重新尝试"
+"error.server_internal" = "服务器内部错误，请稍后重试"
+"error.server_contact_admin" = "服务器异常，请联系管理员"
+"error.sms_provider" = "返回异常：{{error}}请联系管理人员！"
+"error.sms_code_invalid" = "验证码错误或不存在，请重试"
+"error.phone_has_no_account" = "该手机号还没有账号，请使用短信登录自动注册首个账号"
+"error.no_pending_login_account" = "没有待选择的登录账号，请重新验证码登录"
+"error.account_not_belong_phone" = "账号不属于本次验证的手机号"
+"error.login_environment_change" = "登录环境变化，请重新登录！"
+"ok.sms_sent" = "发送成功"
+"ok.login" = "登录成功"
+"ok.register_and_login" = "注册并登录成功"
+"ok.new_account_and_login" = "新账号注册并登录成功"
+"ok.choose_login_account" = "请选择要登录的账号"
+"sms.action.login_register" = "登录或注册"
+
+[plurals."example.items"]
+zero = "没有项目"
+one = "{{count}} 个项目"
+other = "{{count}} 个项目"

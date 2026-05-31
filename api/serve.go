@@ -3,6 +3,7 @@ package api
 import (
 	"miaoverse/api/routers/v1/sms"
 	"miaoverse/api/routers/v1/user/login"
+	"miaoverse/api/routers/v1/user/profile"
 	"miaoverse/middleware"
 	"miaoverse/model/server"
 	"time"
@@ -42,4 +43,11 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		return login.RegisterBySMSHandler(c, servants)
 	})
 
+	userGroup := v1.Group("/user")
+	userGroup.Put("/info", func(c fiber.Ctx) error {
+		return profile.UpdateFullHandler(c, servants)
+	})
+	userGroup.Patch("/info", func(c fiber.Ctx) error {
+		return profile.UpdatePartialHandler(c, servants)
+	})
 }

@@ -1,0 +1,377 @@
+package i18n
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+
+	"github.com/gofiber/fiber/v3"
+	"github.com/pelletier/go-toml/v2"
+)
+
+type MessageKey string
+
+const (
+	LangZhCN = "zh-CN"
+
+	ErrBadRequest             MessageKey = "error.bad_request"
+	ErrRequestTimeout         MessageKey = "error.request_timeout"
+	ErrServerInternal         MessageKey = "error.server_internal"
+	ErrServerContactAdmin     MessageKey = "error.server_contact_admin"
+	ErrSMSProvider            MessageKey = "error.sms_provider"
+	ErrSMSCodeInvalid         MessageKey = "error.sms_code_invalid"
+	ErrPhoneHasNoAccount      MessageKey = "error.phone_has_no_account"
+	ErrNoPendingLoginAccount  MessageKey = "error.no_pending_login_account"
+	ErrAccountNotBelongPhone  MessageKey = "error.account_not_belong_phone"
+	ErrLoginEnvironmentChange MessageKey = "error.login_environment_change"
+	ErrUnauthorized           MessageKey = "error.unauthorized"
+	ErrUserNotFound           MessageKey = "error.user_not_found"
+	ErrUserInfoConflict       MessageKey = "error.user_info_conflict"
+
+	OKSMSSent              MessageKey = "ok.sms_sent"
+	OKLogin                MessageKey = "ok.login"
+	OKRegisterAndLogin     MessageKey = "ok.register_and_login"
+	OKNewAccountAndLogin   MessageKey = "ok.new_account_and_login"
+	OKChooseLoginAccount   MessageKey = "ok.choose_login_account"
+	OKUserInfoUpdated      MessageKey = "ok.user_info_updated"
+	SMSActionLoginRegister MessageKey = "sms.action.login_register"
+)
+
+type Data map[string]any
+
+type message struct {
+	Zero  string `toml:"zero"`
+	One   string `toml:"one"`
+	Two   string `toml:"two"`
+	Few   string `toml:"few"`
+	Many  string `toml:"many"`
+	Other string `toml:"other"`
+}
+
+type fileCatalog struct {
+	Language string             `toml:"language"`
+	Messages map[string]string  `toml:"messages"`
+	Plurals  map[string]message `toml:"plurals"`
+}
+
+var (
+	catalogMu       sync.RWMutex
+	defaultLanguage = LangZhCN
+	catalog         = map[string]map[MessageKey]message{}
+	templatePattern = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
+)
+
+func init() {
+	resetCatalog()
+}
+
+func LoadDir(dir string) error {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return nil
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	next := cloneCatalog()
+	for _, entry := range entries {
+		if entry.IsDir() || strings.ToLower(filepath.Ext(entry.Name())) != ".toml" {
+			continue
+		}
+		if err := loadFileInto(next, filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+	}
+
+	catalogMu.Lock()
+	catalog = next
+	catalogMu.Unlock()
+	return nil
+}
+
+func SetDefaultLanguage(lang string) {
+	lang = canonicalLanguage(lang)
+	if lang == "" {
+		return
+	}
+
+	catalogMu.Lock()
+	defaultLanguage = lang
+	catalogMu.Unlock()
+}
+
+func Message(ctx fiber.Ctx, key MessageKey) string {
+	return Render(LanguageFromCtx(ctx), key, nil)
+}
+
+func Messagef(ctx fiber.Ctx, key MessageKey, args ...any) string {
+	return fmt.Sprintf(Message(ctx, key), args...)
+}
+
+func T(ctx fiber.Ctx, key MessageKey, data Data) string {
+	return Render(LanguageFromCtx(ctx), key, data)
+}
+
+func Plural(ctx fiber.Ctx, key MessageKey, count int, data Data) string {
+	return PluralByLang(LanguageFromCtx(ctx), key, count, data)
+}
+
+func MessageByLang(lang string, key MessageKey) string {
+	return Render(lang, key, nil)
+}
+
+func Render(lang string, key MessageKey, data Data) string {
+	msg, ok := findMessage(lang, key)
+	if !ok {
+		return string(key)
+	}
+	return renderTemplate(msg.Other, data)
+}
+
+func PluralByLang(lang string, key MessageKey, count int, data Data) string {
+	msg, ok := findMessage(lang, key)
+	if !ok {
+		return string(key)
+	}
+
+	if data == nil {
+		data = Data{}
+	}
+	data["count"] = count
+	return renderTemplate(selectPlural(msg, count), data)
+}
+
+func LanguageFromCtx(ctx fiber.Ctx) string {
+	return MatchLanguage(ctx.Get("Accept-Language"))
+}
+
+func MatchLanguage(header string) string {
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
+
+	for _, candidate := range parseAcceptLanguage(header) {
+		if _, ok := catalog[candidate]; ok {
+			return candidate
+		}
+		base := strings.Split(candidate, "-")[0]
+		for lang := range catalog {
+			if strings.EqualFold(strings.Split(lang, "-")[0], base) {
+				return lang
+			}
+		}
+	}
+	return defaultLanguage
+}
+
+func loadFileInto(target map[string]map[MessageKey]message, filename string) error {
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+
+	file := fileCatalog{}
+	if err := toml.Unmarshal(content, &file); err != nil {
+		return fmt.Errorf("load i18n file %s: %w", filename, err)
+	}
+
+	lang := canonicalLanguage(file.Language)
+	if lang == "" {
+		lang = canonicalLanguage(strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename)))
+	}
+	if lang == "" {
+		return fmt.Errorf("load i18n file %s: missing language", filename)
+	}
+
+	if _, ok := target[lang]; !ok {
+		target[lang] = map[MessageKey]message{}
+	}
+	for key, value := range file.Messages {
+		target[lang][MessageKey(key)] = message{Other: value}
+	}
+	for key, value := range file.Plurals {
+		target[lang][MessageKey(key)] = value
+	}
+	return nil
+}
+
+func findMessage(lang string, key MessageKey) (message, bool) {
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
+
+	for _, candidate := range []string{MatchLanguageLocked(lang), defaultLanguage, LangZhCN} {
+		if messages, ok := catalog[candidate]; ok {
+			if msg, ok := messages[key]; ok {
+				return msg, true
+			}
+		}
+	}
+	return message{}, false
+}
+
+func MatchLanguageLocked(header string) string {
+	for _, candidate := range parseAcceptLanguage(header) {
+		if _, ok := catalog[candidate]; ok {
+			return candidate
+		}
+		base := strings.Split(candidate, "-")[0]
+		for lang := range catalog {
+			if strings.EqualFold(strings.Split(lang, "-")[0], base) {
+				return lang
+			}
+		}
+	}
+	return defaultLanguage
+}
+
+func parseAcceptLanguage(header string) []string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return nil
+	}
+
+	parts := strings.Split(header, ",")
+	languages := make([]string, 0, len(parts))
+	for _, part := range parts {
+		lang := strings.TrimSpace(strings.Split(part, ";")[0])
+		lang = canonicalLanguage(lang)
+		if lang != "" && lang != "*" {
+			languages = append(languages, lang)
+		}
+	}
+	return languages
+}
+
+func canonicalLanguage(lang string) string {
+	lang = strings.TrimSpace(strings.ReplaceAll(lang, "_", "-"))
+	if lang == "" {
+		return ""
+	}
+
+	parts := strings.Split(lang, "-")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if i == 0 {
+			parts[i] = strings.ToLower(part)
+			continue
+		}
+		if len(part) == 2 {
+			parts[i] = strings.ToUpper(part)
+			continue
+		}
+		parts[i] = strings.ToLower(part)
+	}
+	return strings.Join(parts, "-")
+}
+
+func selectPlural(msg message, count int) string {
+	switch {
+	case count == 0 && msg.Zero != "":
+		return msg.Zero
+	case count == 1 && msg.One != "":
+		return msg.One
+	case count == 2 && msg.Two != "":
+		return msg.Two
+	case count > 1 && count < 5 && msg.Few != "":
+		return msg.Few
+	case count >= 5 && msg.Many != "":
+		return msg.Many
+	case msg.Other != "":
+		return msg.Other
+	case msg.One != "":
+		return msg.One
+	case msg.Zero != "":
+		return msg.Zero
+	default:
+		return ""
+	}
+}
+
+func renderTemplate(tmpl string, data Data) string {
+	if data == nil {
+		return tmpl
+	}
+	return templatePattern.ReplaceAllStringFunc(tmpl, func(match string) string {
+		name := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{"), "}}"))
+		value, ok := data[name]
+		if !ok {
+			return match
+		}
+		return valueToString(value)
+	})
+}
+
+func valueToString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+func cloneCatalog() map[string]map[MessageKey]message {
+	catalogMu.RLock()
+	defer catalogMu.RUnlock()
+
+	next := map[string]map[MessageKey]message{}
+	for lang, messages := range catalog {
+		next[lang] = map[MessageKey]message{}
+		for key, msg := range messages {
+			next[lang][key] = msg
+		}
+	}
+	return next
+}
+
+func resetCatalog() {
+	catalogMu.Lock()
+	defer catalogMu.Unlock()
+
+	defaultLanguage = LangZhCN
+	catalog = map[string]map[MessageKey]message{
+		LangZhCN: {
+			ErrBadRequest:             {Other: "请求错误，请检查参数"},
+			ErrRequestTimeout:         {Other: "请求超时，请重新尝试"},
+			ErrServerInternal:         {Other: "服务器内部错误，请稍后重试"},
+			ErrServerContactAdmin:     {Other: "服务器异常，请联系管理员"},
+			ErrSMSProvider:            {Other: "返回异常：{{error}}请联系管理人员！"},
+			ErrSMSCodeInvalid:         {Other: "验证码错误或不存在，请重试"},
+			ErrPhoneHasNoAccount:      {Other: "该手机号还没有账号，请使用短信登录自动注册首个账号"},
+			ErrNoPendingLoginAccount:  {Other: "没有待选择的登录账号，请重新验证码登录"},
+			ErrAccountNotBelongPhone:  {Other: "账号不属于本次验证的手机号"},
+			ErrLoginEnvironmentChange: {Other: "登录环境变化，请重新登录！"},
+			ErrUnauthorized:           {Other: "请先登录"},
+			ErrUserNotFound:           {Other: "用户不存在"},
+			ErrUserInfoConflict:       {Other: "用户信息已存在冲突，请更换后重试"},
+
+			OKSMSSent:              {Other: "发送成功"},
+			OKLogin:                {Other: "登录成功"},
+			OKRegisterAndLogin:     {Other: "注册并登录成功"},
+			OKNewAccountAndLogin:   {Other: "新账号注册并登录成功"},
+			OKChooseLoginAccount:   {Other: "请选择要登录的账号"},
+			OKUserInfoUpdated:      {Other: "用户信息修改成功"},
+			SMSActionLoginRegister: {Other: "登录或注册"},
+		},
+	}
+}

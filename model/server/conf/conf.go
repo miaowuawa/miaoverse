@@ -28,6 +28,10 @@ type AppConfig struct {
 	SMS struct {
 		RateLimit int `yaml:"rate_limit"` // 短信发送速率限制，单位：条/小时
 	} `yaml:"smsreq"`
+	I18n struct {
+		Dir             string `yaml:"dir"`
+		DefaultLanguage string `yaml:"default_language"`
+	} `yaml:"i18n"`
 	SmsBao struct {
 		Gateway  string `yaml:"gateway"`
 		Username string `yaml:"username"`

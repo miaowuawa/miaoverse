@@ -19,6 +19,12 @@ func (d *UserDAO) QueryByPhone(phone string, region int) ([]user.User, error) {
 	return users, err
 }
 
+func (d *UserDAO) QueryByID(userID uint64) (*user.User, error) {
+	var u user.User
+	err := d.DB.Where("id = ?", userID).First(&u).Error
+	return &u, err
+}
+
 func (d *UserDAO) QueryCredential(userID uint64, credType int8) (*user.UserCredential, error) {
 	var cred user.UserCredential
 	err := d.DB.Where("user_id = ? AND credential_type = ?", userID, credType).First(&cred).Error
