@@ -1,4 +1,4 @@
-package miaoverse
+package main
 
 import (
 	"github.com/gofiber/fiber/v3"

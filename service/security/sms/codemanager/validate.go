@@ -2,10 +2,12 @@ package codemanager
 
 import (
 	"errors"
+	"fmt"
+	"log"
 	"strconv"
 )
 
-// VerifyCodeByPhoneMD5 验证验证码是否正确
+// VerifyCodeByRegionPhoneMD5 验证验证码是否正确
 // 参数说明：
 //
 //	phoneMD5: 手机号的MD5字符串
@@ -16,18 +18,25 @@ import (
 //
 //	bool: 验证是否通过
 //	error: 错误信息（Redis操作失败/其他系统错误）
-func (c *CodeManager) VerifyCodeByPhoneMD5(phoneMD5 string, codeUUID string, inputCode string) (bool, error) {
+func (c *CodeManager) VerifyCodeByRegionPhoneMD5(regionPhoneMD5 string, codeUUID string, inputCode string) (bool, error) {
 	// 1. 拼接codeID（和生成时的规则保持一致）
-	codeID := codeUUID + phoneMD5
+	codeID := codeUUID + "-" + regionPhoneMD5
+
+	existsCmd := c.Redis.Exists(c.Context, codeID)
+	// 第一步：获取执行结果和错误
+	count, err := existsCmd.Result()
+	// 第二步：先处理命令执行错误（比如 Redis 连不上）
+	if err != nil {
+		return false, fmt.Errorf("检查验证码存在性失败：%w", err)
+	}
+	// 第三步：判断 Key 是否不存在（count == 0 表示不存在）
+	if count == 0 {
+		return false, errors.New("验证码不存在")
+	}
 
 	// 2. 从Redis中获取存储的验证码
 	result := c.Redis.Get(c.Context, codeID)
 	if result.Err() != nil {
-		// 如果是key不存在，说明验证码已过期或不存在
-		if result.Err().Error() == "redis: nil" {
-			return false, nil
-		}
-		// 其他Redis错误
 		return false, result.Err()
 	}
 
@@ -49,8 +58,11 @@ func (c *CodeManager) VerifyCodeByPhoneMD5(phoneMD5 string, codeUUID string, inp
 		return false, nil
 	}
 
-	// 6. 验证成功后建议删除验证码（防止重复使用）
-	_ = c.Redis.Del(c.Context, codeID).Err()
+	if delErr := c.Redis.Del(c.Context, codeID).Err(); delErr != nil {
+		// 删除失败就算验证不过，避免重用验证码
+		log.Printf("删除验证码失败，codeID=%s, err=%v", codeID, delErr)
+		return false, errors.New("验证码验证成功，但删除失败: " + delErr.Error())
+	}
 
 	return true, nil
 }

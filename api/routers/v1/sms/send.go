@@ -1,73 +1,62 @@
 package sms
 
 import (
+	"time"
+
 	"github.com/gofiber/fiber/v3"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/dto/resp/smsresp"
 	"miaoverse/model/dto/smsreq"
-	"miaoverse/service/security/sms"
-	"miaoverse/service/security/sms/codemanager"
-	"miaoverse/service/security/sms/smsbao"
-	"time"
+	"miaoverse/model/server"
+	"miaoverse/service/security"
 )
 
-func SendSmsHandler(c fiber.Ctx, codeManager *codemanager.CodeManager, smsBaoServant *smsbao.SmsBaoServant) error {
+func SendSmsHandler(c fiber.Ctx, servants *server.Servants) error {
 	if !c.IsJSON() {
-		_ = c.Status(fiber.StatusBadRequest).JSON(
-			resp.CodeWithMsg{
-				Code: fiber.StatusBadRequest,
-				Msg:  "请求错误，请升级最新版本喵星",
-			},
-		)
+		return badRequest(c)
 	}
+
 	req := &smsreq.GetSmsReq{}
-	err := c.Bind().Body(req)
-	if err != nil {
-		_ = c.Status(fiber.StatusBadRequest).JSON(
-			resp.CodeWithMsg{
-				Code: fiber.StatusBadRequest,
-				Msg:  "请求错误，请升级最新版本喵星",
-			},
-		)
-	} //处理反序列化错误
-	// validate A value
-	valid, _ := sms.ValidateAvalue(req.Timestamp)
+	if err := c.Bind().Body(req); err != nil {
+		return badRequest(c)
+	}
+	if err := servants.Validator.Struct(req); err != nil {
+		return badRequest(c)
+	}
+
+	valid, _ := security.ValidateAvalue(req.Timestamp)
 	if !valid {
-		_ = c.Status(fiber.StatusBadRequest).JSON(
-			resp.CodeWithMsg{
-				Code: fiber.StatusBadRequest,
-				Msg:  "请求超时，请重新尝试",
-			},
-		)
-	} //处理A校验错误
-	err, codeID, codeUUID := codeManager.PrepareCodeForPhone(req.Region, req.Phone)
-	if err != nil {
-		_ = c.Status(fiber.StatusInternalServerError).JSON(
-			resp.CodeWithMsg{
-				Code: fiber.StatusInternalServerError,
-				Msg:  "服务器内部错误，请稍后重试",
-			},
-		)
-	} //处理preparecode错误
-
-	err = smsBaoServant.SendPhoneCaptcha(req.Phone, codeID, time.Minute*5)
-	if err != nil {
-		_ = c.Status(fiber.StatusInternalServerError).JSON(
-			resp.CodeWithMsg{
-				Code: fiber.StatusInternalServerError,
-				Msg:  "返回异常：" + err.Error() + "请联系管理人员！",
-			},
-		)
+		return c.Status(fiber.StatusBadRequest).JSON(resp.CodeWithMsg{
+			Code: fiber.StatusBadRequest,
+			Msg:  "请求超时，请重新尝试",
+		})
 	}
 
-	response := smsresp.SmsResp{
-		CodeId:   codeID,
-		CodeUuid: codeUUID,
+	err, code, codeUUID := servants.CodeManager.PrepareCodeForPhone(req.Region, req.Phone)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(resp.CodeWithMsg{
+			Code: fiber.StatusInternalServerError,
+			Msg:  "服务器内部错误，请稍后重试",
+		})
+	}
+
+	err = servants.SmsServant.SendPhoneCaptcha(req.Phone, code, time.Minute*5, "登录或注册")
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(resp.CodeWithMsg{
+			Code: fiber.StatusInternalServerError,
+			Msg:  "返回异常：" + err.Error() + "请联系管理人员！",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(smsresp.SmsResp{
+		CodeUUID: codeUUID,
 		Msg:      "发送成功",
-	}
+	})
+}
 
-	_ = c.Status(fiber.StatusInternalServerError).JSON(
-		response,
-	)
-	return nil
+func badRequest(c fiber.Ctx) error {
+	return c.Status(fiber.StatusBadRequest).JSON(resp.CodeWithMsg{
+		Code: fiber.StatusBadRequest,
+		Msg:  "请求错误，请检查参数",
+	})
 }

@@ -1,23 +1,26 @@
 package codemanager
 
 import (
+	"strconv"
+
 	"github.com/gofiber/utils/v2"
 	"miaoverse/util/encrypt/md5hash"
 	"miaoverse/util/maths"
 )
 
 func generateCode() int {
-	return maths.RandomIntLimited(100000, 999999)
+	code, _ := maths.RandomIntLimited(1000, 10000)
+	return code
 }
 
-// PrepareCodeForPhone 为一个手机号准备一个验证码，返回成功/失败和验证码uuid
 func (c *CodeManager) PrepareCodeForPhone(region string, phone string) (error, string, string) {
-	codeUUID := utils.UUID()
-	codeID := codeUUID + md5hash.HashStr(region+phone)
-	//TODO:启动事务
-	result := c.Redis.Set(c.Context, codeID, generateCode(), c.CodeExpireTime)
+	codeUUID := utils.UUIDv4()
+	codeID := codeUUID + "-" + md5hash.HashStr(region+phone)
+	code := generateCode()
+
+	result := c.Redis.Set(c.Context, codeID, code, c.CodeExpireTime)
 	if result.Err() != nil {
 		return result.Err(), "", ""
 	}
-	return nil, codeID, codeUUID
+	return nil, strconv.Itoa(code), codeUUID
 }

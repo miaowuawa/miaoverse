@@ -1,8 +1,7 @@
-package sms
+package security
 
 import (
 	"fmt"
-	"math"
 	"math/big"
 	"time"
 )
@@ -50,8 +49,15 @@ func ValidateAvalue(a string) (bool, error) {
 	// 时间差绝对值 ≤ 1000ms
 	if ts < now-1000 || ts > now+1000 {
 		return false, fmt.Errorf("时间戳过期，当前时间：%d，请求时间：%d，差值：%dms",
-			now, ts, math.Abs(float64(now-ts)))
+			now, ts, absInt64(now-ts))
 	}
 
 	return true, nil
+}
+
+func absInt64(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

@@ -4,33 +4,36 @@ import (
 	"miaoverse/model/dao/user"
 )
 
-func (d *UserDAO) Create(user *user.User, credential *user.UserCredential) (uint64, error) {
-
-	// 开启事务
+func (d *UserDAO) Create(newUser user.User, credentials []user.UserCredential) (uint64, error) {
 	tx := d.DB.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
 		}
 	}()
 
-	// 1. 创建用户
-	if err := d.DB.Create(user).Error; err != nil {
+	if err := tx.Create(&newUser).Error; err != nil {
 		tx.Rollback()
 		return 0, err
 	}
 
-	// 2. 创建凭证（关联用户ID）
-	credential.UserID = user.ID
-	if err := tx.Create(credential).Error; err != nil {
-		tx.Rollback()
-		return 0, err
+	for i := range credentials {
+		credentials[i].UserID = newUser.ID
+	}
+	if len(credentials) > 0 {
+		if err := tx.Create(&credentials).Error; err != nil {
+			tx.Rollback()
+			return 0, err
+		}
 	}
 
-	// 提交事务
 	if err := tx.Commit().Error; err != nil {
 		return 0, err
 	}
 
-	return user.ID, nil
+	return newUser.ID, nil
 }

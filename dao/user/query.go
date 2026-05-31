@@ -1,17 +1,24 @@
 package user
 
 import (
+	"strconv"
+
+	"miaoverse/consts"
 	"miaoverse/model/dao/user"
 )
 
-// QueryByPhone 按手机号查询所有用户（适配一个手机号多账户）
-func (d *UserDAO) QueryByPhone(phone string) ([]user.User, error) {
+func (d *UserDAO) QueryByPhone(phone string, region int) ([]user.User, error) {
 	var users []user.User
-	err := d.DB.Where("phone = ?", phone).Find(&users).Error
+	err := d.DB.Table("`user`").
+		Select("`user`.*").
+		Joins("JOIN user_credentials AS phone_cred ON phone_cred.user_id = `user`.id").
+		Joins("JOIN user_credentials AS region_cred ON region_cred.user_id = `user`.id").
+		Where("phone_cred.credential_type = ? AND phone_cred.credential_key = ? AND phone_cred.credential_value = ?", consts.Phone, "phone", phone).
+		Where("region_cred.credential_type = ? AND region_cred.credential_key = ? AND region_cred.credential_value = ?", consts.Phone, "region", strconv.Itoa(region)).
+		Find(&users).Error
 	return users, err
 }
 
-// QueryCredential 按用户ID+凭证类型查询凭证
 func (d *UserDAO) QueryCredential(userID uint64, credType int8) (*user.UserCredential, error) {
 	var cred user.UserCredential
 	err := d.DB.Where("user_id = ? AND credential_type = ?", userID, credType).First(&cred).Error

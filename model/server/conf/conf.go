@@ -6,18 +6,25 @@ type AppConfig struct {
 		LogLevel string `yaml:"log_level"`
 	} `yaml:"server"`
 	Sql struct {
-		Host     string `yaml:"host"`
-		Port     int    `yaml:"port"`
-		Username string `yaml:"username"`
-		Password string `yaml:"bcrypthash"`
-		DbName   string `yaml:"db_name"`
+		Host            string `yaml:"host"`
+		Port            int    `yaml:"port"`
+		Username        string `yaml:"username"`
+		Password        string `yaml:"password"`
+		DbName          string `yaml:"db_name"`
+		MaxOpenConns    int    `yaml:"max_open_conns"`
+		MaxIdleConns    int    `yaml:"max_idle_conns"`
+		ConnMaxLifetime int    `yaml:"conn_max_lifetime"`
+		ConnMaxIdletime int    `yaml:"conn_max_idle_time"`
 	} `yaml:"database"`
 	Redis struct {
 		Host     string `yaml:"host"`
 		Port     int    `yaml:"port"`
 		Username string `yaml:"username"`
-		Password string `yaml:"bcrypthash"`
-	} `yaml:"database"`
+		Password string `yaml:"password"`
+	} `yaml:"redis"`
+	Session struct {
+		DB int `yaml:"dbnum"`
+	} `yaml:"session"`
 	SMS struct {
 		RateLimit int `yaml:"rate_limit"` // 短信发送速率限制，单位：条/小时
 	} `yaml:"smsreq"`

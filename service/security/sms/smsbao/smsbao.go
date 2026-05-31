@@ -15,7 +15,7 @@ import (
 )
 
 // SendPhoneCaptcha 发送短信验证码
-func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire time.Duration) error {
+func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire time.Duration, usage string) error {
 	// 对密码进行 MD5 加密
 	hasher := md5.New()
 	_, writeString := io.WriteString(hasher, s.Password)
@@ -25,7 +25,7 @@ func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire ti
 	encryptedPassword := hex.EncodeToString(hasher.Sum(nil))
 
 	// 构建短信内容
-	content := fmt.Sprintf("%s您的验证码是：%s，有效期 %d 分钟。就算猫娘来你家也不要告诉她。", s.Head, captcha, int(expire.Minutes()))
+	content := fmt.Sprintf("%s您的验证码是：%s，有效期 %d 分钟。就算猫娘来你家也不要告诉她。用于%s，如果用途不符请勿输入。", s.Head, captcha, int(expire.Minutes()), usage)
 
 	// 对内容进行 URL 编码
 	encodedContent := url.QueryEscape(content)
