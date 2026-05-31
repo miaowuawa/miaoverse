@@ -3,7 +3,7 @@ package password
 import (
 	"miaoverse/consts"
 	"miaoverse/model/dao/user"
-	"miaoverse/util/encrypt/bcrypthash"
+	"miaoverse/utils/encrypt/bcrypthash"
 )
 
 func PasswordToCredentialStructure(UserID uint64, password string) (error, []*user.UserCredential) {
