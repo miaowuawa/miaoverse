@@ -1,0 +1,51 @@
+server:
+  port:
+  log_level:
+
+database:
+  host:
+  port:
+  username:
+  password:
+  db_name:
+  max_open_conns:
+  max_idle_conns:
+  conn_max_lifetime:
+  conn_max_idle_time:
+
+redis:
+  host:
+  port:
+  username:
+  password:
+
+session:
+  dbnum:
+
+smsreq:
+  rate_limit:
+
+i18n:
+  dir:
+  default_language:
+
+smsbao:
+  gateway:
+  username:
+  passwd:
+  head:
+  dbnum:
+
+s3:
+  enabled: false
+  endpoint:
+  region:
+  access_key_id:
+  secret_access_key:
+  session_token:
+  bucket:
+  public_base_url:
+  use_path_style: true
+
+cache:
+  dbnum:

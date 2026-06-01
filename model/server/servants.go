@@ -4,6 +4,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	fiberstoreredis "github.com/gofiber/storage/redis/v3"
 	"miaoverse/dao/user"
+	storages3 "miaoverse/service/s3"
 	"miaoverse/service/security/sms/codemanager"
 	"miaoverse/service/security/sms/smsbao"
 )
@@ -14,4 +15,5 @@ type Servants struct {
 	CodeManager         *codemanager.CodeManager
 	Validator           *validator.Validate
 	UserServant         *user.UserDAO
+	S3Servant           *storages3.Servant
 }

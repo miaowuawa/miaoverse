@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"miaoverse/model/server/conf"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 )
 
@@ -23,7 +24,9 @@ func InitConfig(configPath string) (error, *conf.AppConfig) {
 	}
 
 	// 解析到全局配置结构体
-	if err := viper.Unmarshal(&GlobalConfig); err != nil {
+	if err := viper.Unmarshal(&GlobalConfig, func(config *mapstructure.DecoderConfig) {
+		config.TagName = "yaml"
+	}); err != nil {
 		return fmt.Errorf("解析配置失败: %v", err), &conf.AppConfig{}
 	}
 

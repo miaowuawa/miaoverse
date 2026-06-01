@@ -39,6 +39,17 @@ type AppConfig struct {
 		Head     string `yaml:"head"`
 		DB       int    `yaml:"dbnum"`
 	} `yaml:"smsbao"`
+	S3 struct {
+		Enabled         bool   `yaml:"enabled"`
+		Endpoint        string `yaml:"endpoint"`
+		Region          string `yaml:"region"`
+		AccessKeyID     string `yaml:"access_key_id"`
+		SecretAccessKey string `yaml:"secret_access_key"`
+		SessionToken    string `yaml:"session_token"`
+		Bucket          string `yaml:"bucket"`
+		PublicBaseURL   string `yaml:"public_base_url"`
+		UsePathStyle    bool   `yaml:"use_path_style"`
+	} `yaml:"s3"`
 	Cache struct {
 		DB int `yaml:"dbnum"`
 	}

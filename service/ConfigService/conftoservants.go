@@ -12,6 +12,7 @@ import (
 	"miaoverse/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
+	storages3 "miaoverse/service/s3"
 	"miaoverse/service/security/sms/codemanager"
 	"miaoverse/service/security/sms/smsbao"
 	"miaoverse/util/validate"
@@ -92,6 +93,23 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		return nil, err
 	}
 
+	var s3Servant *storages3.Servant
+	if conf.S3.Enabled {
+		s3Servant, err = storages3.NewServant(context.Background(), storages3.Config{
+			Endpoint:        conf.S3.Endpoint,
+			Region:          conf.S3.Region,
+			AccessKeyID:     conf.S3.AccessKeyID,
+			SecretAccessKey: conf.S3.SecretAccessKey,
+			SessionToken:    conf.S3.SessionToken,
+			Bucket:          conf.S3.Bucket,
+			PublicBaseURL:   conf.S3.PublicBaseURL,
+			UsePathStyle:    conf.S3.UsePathStyle,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	//final:return
 	return &server.Servants{
 		FiberSessionStorage: SessionStorage,
@@ -99,6 +117,7 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		CodeManager:         codeManager,
 		UserServant:         userdao,
 		Validator:           validator,
+		S3Servant:           s3Servant,
 	}, nil
 
 }
