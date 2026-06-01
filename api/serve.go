@@ -44,6 +44,7 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	})
 
 	userGroup := v1.Group("/user")
+	userGroup.Use(middleware.RequireUser(servants, middleware.AccountActive()))
 	userGroup.Put("/info", func(c fiber.Ctx) error {
 		return profile.UpdateFullHandler(c, servants)
 	})

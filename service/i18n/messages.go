@@ -31,6 +31,13 @@ const (
 	ErrUnauthorized           MessageKey = "error.unauthorized"
 	ErrUserNotFound           MessageKey = "error.user_not_found"
 	ErrUserInfoConflict       MessageKey = "error.user_info_conflict"
+	ErrAccountBanned          MessageKey = "error.account_banned"
+	ErrAccountClosed          MessageKey = "error.account_closed"
+	ErrAccountDisabled        MessageKey = "error.account_disabled"
+	ErrAccountUnavailable     MessageKey = "error.account_unavailable"
+	ErrPhoneNotBound          MessageKey = "error.phone_not_bound"
+	ErrPasswordNotSet         MessageKey = "error.password_not_set"
+	ErrCertificationRequired  MessageKey = "error.certification_required"
 
 	OKSMSSent              MessageKey = "ok.sms_sent"
 	OKLogin                MessageKey = "ok.login"
@@ -364,6 +371,13 @@ func resetCatalog() {
 			ErrUnauthorized:           {Other: "请先登录"},
 			ErrUserNotFound:           {Other: "用户不存在"},
 			ErrUserInfoConflict:       {Other: "用户信息已存在冲突，请更换后重试"},
+			ErrAccountBanned:          {Other: "账号被封禁，无法继续操作"},
+			ErrAccountClosed:          {Other: "账号已注销，无法继续操作"},
+			ErrAccountDisabled:        {Other: "账号被临时禁用，无法继续操作"},
+			ErrAccountUnavailable:     {Other: "账号状态异常，无法继续操作"},
+			ErrPhoneNotBound:          {Other: "先绑定手机号再操作哦～"},
+			ErrPasswordNotSet:         {Other: "先设置密码再操作哦～"},
+			ErrCertificationRequired:  {Other: "先完成账号认证再操作哦～"},
 
 			OKSMSSent:              {Other: "发送成功"},
 			OKLogin:                {Other: "登录成功"},

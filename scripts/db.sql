@@ -33,20 +33,31 @@ CREATE TABLE IF NOT EXISTS `user_credentials` (
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='user credentials';
 
--- unfinished
-CREATE TABLE IF  NOT EXISTS `MOMENTS`
-(
-    `id`              BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT COMMENT 'moment id',
-    `user_id`         BIGINT UNSIGNED  NOT NULL COMMENT 'user.id',
-    `title`           TEXT             NOT NULL COMMENT 'moment title',
-    `content`         TEXT             NOT NULL COMMENT 'moment content',
-    `files`           JSON COMMENT 'moment files',
-    `image_ids`       JSON COMMENT 'moment image ids',
-    `video_ids`       JSON COMMENT 'moment video ids',
-    `audio_ids`       JSON COMMENT 'moment audio ids',
-    `created_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted`         BOOLEAN,
-    `visibility`      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 public, 1 private, 2 friends, 3 followers, 4 following',
-    `comment_control` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 all, 1 follower, 2 following, 3 author, 4 none',
-)
+CREATE TABLE IF NOT EXISTS `files` (
+    `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'file id',
+    `user_id`       BIGINT UNSIGNED NOT NULL COMMENT 'uploader user id',
+    `file_name`     VARCHAR(255)    NOT NULL COMMENT 'original file name',
+    `file_url`      VARCHAR(500)    NOT NULL COMMENT 'file storage url',
+    `file_type`     VARCHAR(20)     NOT NULL COMMENT 'image, video, audio, document, other',
+    `file_ext`      VARCHAR(20)     NOT NULL DEFAULT '' COMMENT 'file extension: jpg, mp4, pdf etc.',
+    `mime_type`     VARCHAR(100)    NOT NULL DEFAULT '' COMMENT 'MIME type: image/jpeg, video/mp4',
+    `file_size`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'file size in bytes',
+    `width`         INT UNSIGNED    NULL DEFAULT NULL COMMENT 'image/video width in pixels',
+    `height`        INT UNSIGNED    NULL DEFAULT NULL COMMENT 'image/video height in pixels',
+    `duration`      INT UNSIGNED    NULL DEFAULT NULL COMMENT 'video/audio duration in seconds',
+    `thumbnail_url` VARCHAR(500)    NULL DEFAULT NULL COMMENT 'thumbnail url for video/audio',
+    `hash`          VARCHAR(64)     NOT NULL DEFAULT '' COMMENT 'file md5/sha256 hash for dedup',
+    `status`        TINYINT UNSIGNED NOT NULL DEFAULT 1 
+        COMMENT '1 active, 2 processing, 3 failed, 4 deleted',
+    `created_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_files_user_id_status` (`user_id`, `status`),
+    KEY `idx_files_file_type` (`file_type`),
+    KEY `idx_files_hash` (`hash`),
+    KEY `idx_files_created_at` (`created_at`),
+    CONSTRAINT `fk_files_user_id` 
+        FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='files storage';
+

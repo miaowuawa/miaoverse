@@ -30,3 +30,11 @@ func (d *UserDAO) QueryCredential(userID uint64, credType int8) (*user.UserCrede
 	err := d.DB.Where("user_id = ? AND credential_type = ?", userID, credType).First(&cred).Error
 	return &cred, err
 }
+
+func (d *UserDAO) HasCredential(userID uint64, credType uint8) (bool, error) {
+	var count int64
+	err := d.DB.Model(&user.UserCredential{}).
+		Where("user_id = ? AND credential_type = ?", userID, credType).
+		Count(&count).Error
+	return count > 0, err
+}
