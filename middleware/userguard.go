@@ -90,8 +90,5 @@ func failureMessage(failure UserCheck.Failure) i18n.MessageKey {
 }
 
 func rejectUserGuard(ctx fiber.Ctx, status int, msg i18n.MessageKey) error {
-	return ctx.Status(status).JSON(resp.CodeWithMsg{
-		Code: status,
-		Msg:  i18n.Message(ctx, msg),
-	})
+	return resp.JSON(ctx, status, msg)
 }

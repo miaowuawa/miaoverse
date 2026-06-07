@@ -452,6 +452,7 @@ curl -i -X PATCH http://localhost:3000/api/v1/user/info \
 ### `POST /api/v1/user/files`
 
 上传当前登录用户的文件。文件会写入 S3，并在数据库 `files` 表中创建记录。
+如果已存在相同 SHA-256 hash 的 active 文件，服务会复用已有 S3 对象链接，只创建新的数据库记录，避免重复上传。
 
 #### 请求头
 

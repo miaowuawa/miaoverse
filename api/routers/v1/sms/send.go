@@ -14,15 +14,15 @@ import (
 
 func SendSmsHandler(c fiber.Ctx, servants *server.Servants) error {
 	if !c.IsJSON() {
-		return badRequest(c)
+		return resp.BadRequest(c)
 	}
 
 	req := &smsreq.GetSmsReq{}
 	if err := c.Bind().Body(req); err != nil {
-		return badRequest(c)
+		return resp.BadRequest(c)
 	}
 	if err := servants.Validator.Struct(req); err != nil {
-		return badRequest(c)
+		return resp.BadRequest(c)
 	}
 
 	valid, _ := security.ValidateAvalue(req.Timestamp)
@@ -52,12 +52,5 @@ func SendSmsHandler(c fiber.Ctx, servants *server.Servants) error {
 	return c.Status(fiber.StatusOK).JSON(smsresp.SmsResp{
 		CodeUUID: codeUUID,
 		Msg:      i18n.Message(c, i18n.OKSMSSent),
-	})
-}
-
-func badRequest(c fiber.Ctx) error {
-	return c.Status(fiber.StatusBadRequest).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusBadRequest,
-		Msg:  i18n.Message(c, i18n.ErrBadRequest),
 	})
 }

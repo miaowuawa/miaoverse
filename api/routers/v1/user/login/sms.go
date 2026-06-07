@@ -17,11 +17,11 @@ import (
 func BySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	req, ok := bindAndValidateSMS(ctx, servants)
 	if !ok {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	if ok, err := verifySMSCode(req, servants); err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	} else if !ok {
 		return ctx.Status(fiber.StatusForbidden).JSON(resp.CodeWithMsg{
 			Code: fiber.StatusForbidden,
@@ -31,10 +31,10 @@ func BySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	users, exists, err := UserCheck.CheckAndCreateIfNotExists(req.Phone, req.Region, servants)
 	if err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 	if len(users) == 0 {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 
 	if !exists {
@@ -46,7 +46,7 @@ func BySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	if err := UserSession.LoginBySMSMultipleChoices(ctx, req.Phone, req.Region); err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 	return ctx.Status(fiber.StatusMultipleChoices).JSON(resp.CodeWithMsgUserChoice{
 		Code:    fiber.StatusMultipleChoices,
@@ -58,11 +58,11 @@ func BySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 func RegisterBySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	req, ok := bindAndValidateSMS(ctx, servants)
 	if !ok {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	if ok, err := verifySMSCode(req, servants); err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	} else if !ok {
 		return ctx.Status(fiber.StatusForbidden).JSON(resp.CodeWithMsg{
 			Code: fiber.StatusForbidden,
@@ -72,7 +72,7 @@ func RegisterBySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	users, err := servants.UserServant.QueryByPhone(req.Phone, req.Region)
 	if err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 	if len(users) == 0 {
 		return ctx.Status(fiber.StatusNotFound).JSON(resp.CodeWithMsg{
@@ -83,7 +83,7 @@ func RegisterBySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	newUser, err := UserCheck.CreateAccountForPhone(req.Phone, req.Region, servants)
 	if err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 
 	return loginSingleAccount(ctx, req.Phone, req.Region, newUser.ID, fiber.StatusCreated, i18n.OKNewAccountAndLogin)
@@ -91,15 +91,15 @@ func RegisterBySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 func ChooseUserHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if !ctx.IsJSON() {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	req := &loginreq.ChooseAccount{}
 	if err := ctx.Bind().Body(req); err != nil {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 	if err := servants.Validator.Struct(req); err != nil {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	phone, region, ok := UserSession.PendingSMSLogin(ctx)
@@ -112,7 +112,7 @@ func ChooseUserHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	belongs, err := UserCheck.UserBelongsToPhone(req.UID, phone, region, servants)
 	if err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 	if !belongs {
 		return ctx.Status(fiber.StatusForbidden).JSON(resp.CodeWithMsg{
@@ -149,25 +149,11 @@ func verifySMSCode(req *loginreq.SMS, servants *server.Servants) (bool, error) {
 
 func loginSingleAccount(ctx fiber.Ctx, phone string, region int, uid uint64, status int, msgKey i18n.MessageKey) error {
 	if err := UserSession.LoginBySMSSingleAccount(ctx, phone, region, uid); err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 	return ctx.Status(status).JSON(resp.CodeWithMsgUserID{
 		Code: status,
 		Msg:  i18n.Message(ctx, msgKey),
 		UID:  uid,
-	})
-}
-
-func badRequest(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusBadRequest).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusBadRequest,
-		Msg:  i18n.Message(ctx, i18n.ErrBadRequest),
-	})
-}
-
-func serverError(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusInternalServerError).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusInternalServerError,
-		Msg:  i18n.Message(ctx, i18n.ErrServerContactAdmin),
 	})
 }

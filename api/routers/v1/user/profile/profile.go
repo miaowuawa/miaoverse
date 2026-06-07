@@ -21,44 +21,44 @@ const (
 
 func UpdateFullHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if !ctx.IsJSON() {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
-		return unauthorized(ctx)
+		return resp.Unauthorized(ctx)
 	}
 
 	req := &updatereq.ProfileFull{}
 	if err := ctx.Bind().Body(req); err != nil {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	updates, ok := fullUpdates(req)
 	if !ok {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 	return updateProfile(ctx, servants, uid, updates)
 }
 
 func UpdatePartialHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if !ctx.IsJSON() {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
-		return unauthorized(ctx)
+		return resp.Unauthorized(ctx)
 	}
 
 	req := &updatereq.ProfilePatch{}
 	if err := ctx.Bind().Body(req); err != nil {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	updates, ok := patchUpdates(req)
 	if !ok {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 	return updateProfile(ctx, servants, uid, updates)
 }
@@ -78,7 +78,7 @@ func updateProfile(ctx fiber.Ctx, servants *server.Servants, uid uint64, updates
 				Msg:  i18n.Message(ctx, i18n.ErrUserInfoConflict),
 			})
 		}
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(resp.CodeWithMsgUser{
@@ -168,25 +168,4 @@ func validGender(value uint8) bool {
 func isConflict(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "Duplicate entry") || strings.Contains(msg, "UNIQUE constraint failed")
-}
-
-func badRequest(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusBadRequest).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusBadRequest,
-		Msg:  i18n.Message(ctx, i18n.ErrBadRequest),
-	})
-}
-
-func unauthorized(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusUnauthorized).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusUnauthorized,
-		Msg:  i18n.Message(ctx, i18n.ErrUnauthorized),
-	})
-}
-
-func serverError(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusInternalServerError).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusInternalServerError,
-		Msg:  i18n.Message(ctx, i18n.ErrServerContactAdmin),
-	})
 }

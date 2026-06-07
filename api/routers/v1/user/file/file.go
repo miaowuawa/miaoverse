@@ -6,8 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
-	"net/http"
+	"mime/multipart"
 	"path/filepath"
 	"strings"
 
@@ -19,49 +18,41 @@ import (
 	"miaoverse/model/dto/file/uploadreq"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
-	"miaoverse/service/i18n"
+	"miaoverse/service/UserFile"
+	"miaoverse/util/filetype"
 )
 
-const (
-	formFileField = "file"
-	timeFormat    = "2006-01-02 15:04:05"
-)
+const formFileField = "file"
 
 func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
-		return unauthorized(ctx)
+		return resp.Unauthorized(ctx)
 	}
 	if servants.S3Servant == nil {
-		return storageUnavailable(ctx)
+		return resp.StorageUnavailable(ctx)
 	}
 
 	fileHeader, err := ctx.FormFile(formFileField)
 	if err != nil || fileHeader == nil {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
-
-	maxSize := servants.MaxUploadFileSize
-	if maxSize > 0 && fileHeader.Size > maxSize {
-		return ctx.Status(fiber.StatusRequestEntityTooLarge).JSON(resp.CodeWithMsg{
-			Code: fiber.StatusRequestEntityTooLarge,
-			Msg:  i18n.Message(ctx, i18n.ErrFileTooLarge),
-		})
+	if servants.MaxUploadFileSize > 0 && fileHeader.Size > servants.MaxUploadFileSize {
+		return resp.FileTooLarge(ctx)
 	}
 
 	req := uploadreq.UploadFile{
 		FileType: strings.TrimSpace(ctx.FormValue("file_type")),
 	}
-	fileName := sanitizeFileName(fileHeader.Filename)
+	fileName := UserFile.SanitizeFileName(fileHeader.Filename)
 	if fileName == "" {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
-	src, err := fileHeader.Open()
+	fileHash, err := hashUploadedFile(fileHeader)
 	if err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
-	defer src.Close()
 
 	fileUUID := uuid.NewString()
 	mimeType := strings.TrimSpace(fileHeader.Header.Get("Content-Type"))
@@ -69,169 +60,106 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		mimeType = "application/octet-stream"
 	}
 	fileExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(fileName)), ".")
-	fileType := normalizeFileType(req.FileType, mimeType)
-	objectKey := buildObjectKey(uid, fileUUID, fileName)
+	fileType := filetype.Normalize(req.FileType, mimeType)
 
-	hasher := sha256.New()
-	fileURL, err := servants.S3Servant.PutObject(ctx.Context(), objectKey, io.TeeReader(src, hasher), mimeType)
-	if err != nil {
-		return serverError(ctx)
+	reusedFile, err := servants.UserServant.QueryActiveFileByHash(fileHash)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return resp.ServerError(ctx)
 	}
 
-	record, err := servants.UserServant.CreateFile(modeluser.File{
-		UUID:      fileUUID,
-		UserID:    uid,
-		FileName:  fileName,
-		ObjectKey: objectKey,
-		FileURL:   fileURL,
-		FileType:  fileType,
-		FileExt:   fileExt,
-		MimeType:  mimeType,
-		FileSize:  uint64(fileHeader.Size),
-		Hash:      hex.EncodeToString(hasher.Sum(nil)),
-		Status:    modeluser.FileStatusActive,
-	})
+	recordInput := modeluser.File{
+		UUID:     fileUUID,
+		UserID:   uid,
+		FileName: fileName,
+		FileType: fileType,
+		FileExt:  fileExt,
+		MimeType: mimeType,
+		FileSize: uint64(fileHeader.Size),
+		Hash:     fileHash,
+		Status:   modeluser.FileStatusActive,
+	}
+
+	if reusedFile != nil && reusedFile.ID != 0 {
+		recordInput.ObjectKey = reusedFile.ObjectKey
+		recordInput.FileURL = reusedFile.FileURL
+		record, err := servants.UserServant.CreateFile(recordInput)
+		if err != nil {
+			return resp.ServerError(ctx)
+		}
+		return resp.FileUploaded(ctx, UserFile.ToFileInfo(record))
+	}
+
+	objectKey := UserFile.BuildObjectKey(uid, fileUUID, fileName)
+	src, err := fileHeader.Open()
+	if err != nil {
+		return resp.ServerError(ctx)
+	}
+	defer src.Close()
+
+	fileURL, err := servants.S3Servant.PutObject(ctx.Context(), objectKey, src, mimeType)
+	if err != nil {
+		return resp.ServerError(ctx)
+	}
+
+	recordInput.ObjectKey = objectKey
+	recordInput.FileURL = fileURL
+	record, err := servants.UserServant.CreateFile(recordInput)
 	if err != nil {
 		_ = servants.S3Servant.DeleteObject(ctx.Context(), objectKey)
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 
-	return ctx.Status(fiber.StatusCreated).JSON(resp.CodeWithMsgFile{
-		Code: fiber.StatusCreated,
-		Msg:  i18n.Message(ctx, i18n.OKFileUploaded),
-		File: toFileInfo(record),
-	})
+	return resp.FileUploaded(ctx, UserFile.ToFileInfo(record))
 }
 
 func TempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
-		return unauthorized(ctx)
+		return resp.Unauthorized(ctx)
 	}
 	if servants.S3Servant == nil {
-		return storageUnavailable(ctx)
+		return resp.StorageUnavailable(ctx)
 	}
 
 	fileUUID := strings.TrimSpace(ctx.Params("uuid"))
 	if fileUUID == "" {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 	if _, err := uuid.Parse(fileUUID); err != nil {
-		return badRequest(ctx)
+		return resp.BadRequest(ctx)
 	}
 
 	record, err := servants.UserServant.QueryActiveFileByUUID(uid, fileUUID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ctx.Status(fiber.StatusNotFound).JSON(resp.CodeWithMsg{
-				Code: fiber.StatusNotFound,
-				Msg:  i18n.Message(ctx, i18n.ErrFileNotFound),
-			})
+			return resp.FileNotFound(ctx)
 		}
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 
-	signature, err := servants.S3Servant.CreateTempSignature(fmt.Sprintf("%d", uid))
+	uidValue := fmt.Sprintf("%d", uid)
+	signature, err := servants.S3Servant.CreateTempSignature(uidValue)
 	if err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
-	link, err := servants.S3Servant.GetTempObjectLink(ctx.Context(), fmt.Sprintf("%d", uid), signature.Signature, record.ObjectKey)
+	link, err := servants.S3Servant.GetTempObjectLink(ctx.Context(), uidValue, signature.Signature, record.ObjectKey)
 	if err != nil {
-		return serverError(ctx)
+		return resp.ServerError(ctx)
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(resp.CodeWithMsgTempFileLink{
-		Code: fiber.StatusOK,
-		Msg:  i18n.Message(ctx, i18n.OKFileTempLink),
-		Link: resp.TempFileLink{
-			UUID:      record.UUID,
-			URL:       link.URL,
-			ExpiresAt: link.ExpiresAt,
-		},
-	})
+	return resp.FileTempLink(ctx, record.UUID, link.URL, link.ExpiresAt)
 }
 
-func buildObjectKey(uid uint64, fileUUID string, fileName string) string {
-	return fmt.Sprintf("uploads/%d/%s/%s", uid, fileUUID, fileName)
-}
-
-func sanitizeFileName(value string) string {
-	value = strings.TrimSpace(value)
-	value = strings.ReplaceAll(value, "\\", "/")
-	value = filepath.Base(value)
-	value = strings.Trim(value, ". ")
-	if value == "" || value == "/" {
-		return ""
-	}
-	return value
-}
-
-func normalizeFileType(value string, mimeType string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	switch value {
-	case "image", "video", "audio", "document", "other":
-		return value
-	}
-
-	mediaType, _, err := mime.ParseMediaType(mimeType)
+func hashUploadedFile(fileHeader *multipart.FileHeader) (string, error) {
+	src, err := fileHeader.Open()
 	if err != nil {
-		mediaType = strings.ToLower(strings.TrimSpace(mimeType))
+		return "", err
 	}
-	switch {
-	case strings.HasPrefix(mediaType, "image/"):
-		return "image"
-	case strings.HasPrefix(mediaType, "video/"):
-		return "video"
-	case strings.HasPrefix(mediaType, "audio/"):
-		return "audio"
-	case mediaType == "application/pdf", strings.HasPrefix(mediaType, "text/"), strings.Contains(mediaType, "document"):
-		return "document"
-	default:
-		return "other"
+	defer src.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, src); err != nil {
+		return "", err
 	}
-}
-
-func toFileInfo(file *modeluser.File) resp.FileInfo {
-	if file == nil {
-		return resp.FileInfo{}
-	}
-	return resp.FileInfo{
-		UUID:      file.UUID,
-		FileName:  file.FileName,
-		FileURL:   file.FileURL,
-		FileType:  file.FileType,
-		FileExt:   file.FileExt,
-		MimeType:  file.MimeType,
-		FileSize:  file.FileSize,
-		Hash:      file.Hash,
-		CreatedAt: file.CreatedAt.Format(timeFormat),
-	}
-}
-
-func badRequest(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusBadRequest).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusBadRequest,
-		Msg:  i18n.Message(ctx, i18n.ErrBadRequest),
-	})
-}
-
-func unauthorized(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusUnauthorized).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusUnauthorized,
-		Msg:  i18n.Message(ctx, i18n.ErrUnauthorized),
-	})
-}
-
-func storageUnavailable(ctx fiber.Ctx) error {
-	return ctx.Status(fiber.StatusServiceUnavailable).JSON(resp.CodeWithMsg{
-		Code: fiber.StatusServiceUnavailable,
-		Msg:  i18n.Message(ctx, i18n.ErrS3Unavailable),
-	})
-}
-
-func serverError(ctx fiber.Ctx) error {
-	return ctx.Status(http.StatusInternalServerError).JSON(resp.CodeWithMsg{
-		Code: http.StatusInternalServerError,
-		Msg:  i18n.Message(ctx, i18n.ErrServerContactAdmin),
-	})
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
