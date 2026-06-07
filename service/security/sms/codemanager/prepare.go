@@ -4,18 +4,17 @@ import (
 	"strconv"
 
 	"github.com/gofiber/utils/v2"
-	"miaoverse/util/encrypt/md5hash"
-	"miaoverse/util/maths"
+	"miaoverse/util"
 )
 
 func generateCode() int {
-	code, _ := maths.RandomIntLimited(1000, 10000)
+	code, _ := util.Maths.RandomIntLimited(1000, 10000)
 	return code
 }
 
 func (c *CodeManager) PrepareCodeForPhone(region string, phone string) (error, string, string) {
 	codeUUID := utils.UUIDv4()
-	codeID := codeUUID + "-" + md5hash.HashStr(region+phone)
+	codeID := codeUUID + "-" + util.MD5Hash.HashStr(region+phone)
 	code := generateCode()
 
 	result := c.Redis.Set(c.Context, codeID, code, c.CodeExpireTime)

@@ -10,8 +10,7 @@ import (
 	"miaoverse/service/UserCheck"
 	"miaoverse/service/UserSession"
 	"miaoverse/service/i18n"
-	"miaoverse/service/security"
-	"miaoverse/util/encrypt/md5hash"
+	"miaoverse/util"
 )
 
 func BySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
@@ -139,11 +138,11 @@ func bindAndValidateSMS(ctx fiber.Ctx, servants *server.Servants) (*loginreq.SMS
 }
 
 func verifySMSCode(req *loginreq.SMS, servants *server.Servants) (bool, error) {
-	valid, _ := security.ValidateAvalue(req.TimeStamp)
+	valid, _ := util.Security.ValidateAvalue(req.TimeStamp)
 	if !valid {
 		return false, nil
 	}
-	hash := md5hash.HashStr(strconv.Itoa(req.Region) + req.Phone)
+	hash := util.MD5Hash.HashStr(strconv.Itoa(req.Region) + req.Phone)
 	return servants.CodeManager.VerifyCodeByRegionPhoneMD5(hash, req.UUID, strconv.Itoa(req.Code))
 }
 

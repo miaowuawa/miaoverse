@@ -15,7 +15,7 @@ import (
 	storages3 "miaoverse/service/s3"
 	"miaoverse/service/security/sms/codemanager"
 	"miaoverse/service/security/sms/smsbao"
-	"miaoverse/util/validate"
+	"miaoverse/util"
 	"strconv"
 	"time"
 )
@@ -88,7 +88,7 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 	userdao.DB = db
 	//step3 validator
 	validator := validator2.New()
-	err = validate.InitialValidator(validator)
+	err = util.Validate.InitialValidator(validator)
 	if err != nil {
 		return nil, err
 	}

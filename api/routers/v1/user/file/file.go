@@ -19,7 +19,7 @@ import (
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
 	"miaoverse/service/UserFile"
-	"miaoverse/util/filetype"
+	"miaoverse/util"
 )
 
 const formFileField = "file"
@@ -60,7 +60,7 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		mimeType = "application/octet-stream"
 	}
 	fileExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(fileName)), ".")
-	fileType := filetype.Normalize(req.FileType, mimeType)
+	fileType := util.FileType.Normalize(req.FileType, mimeType)
 
 	reusedFile, err := servants.UserServant.QueryActiveFileByHash(fileHash)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

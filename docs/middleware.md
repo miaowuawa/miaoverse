@@ -15,7 +15,7 @@ middleware.Initial(app, servants)
 
 当前不再对已登录 session 做 `User-Agent` 强绑定。浏览器版本升级、插件、代理或系统 WebView 都可能导致 UA 变化，强绑定容易误伤正常用户。
 
-UA 解析工具 `validate.ParseUA` 目前值为：
+UA 解析工具 `util.Validate.ParseUA` 目前值为：
 
 - `pc`：桌面浏览器或无法识别的普通 UA。
 - `wap`：手机/平板/H5 浏览器 UA。

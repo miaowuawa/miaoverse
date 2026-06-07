@@ -4,7 +4,7 @@ import (
 	user "miaoverse/model/dao/user"
 	"miaoverse/model/server"
 	phone2 "miaoverse/service/security/credentials/phone"
-	"miaoverse/util/buildstring"
+	"miaoverse/util"
 )
 
 func CheckAndCreateIfNotExists(phone string, region int, servants *server.Servants) ([]user.User, bool, error) {
@@ -24,7 +24,7 @@ func CheckAndCreateIfNotExists(phone string, region int, servants *server.Servan
 }
 
 func CreateAccountForPhone(phone string, region int, servants *server.Servants) (user.User, error) {
-	username, err := buildstring.GenerateUsername()
+	username, err := util.BuildString.GenerateUsername()
 	if err != nil {
 		return user.User{}, err
 	}

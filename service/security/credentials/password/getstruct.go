@@ -3,12 +3,12 @@ package password
 import (
 	"miaoverse/consts"
 	"miaoverse/model/dao/user"
-	"miaoverse/utils/encrypt/bcrypthash"
+	"miaoverse/util"
 )
 
 func PasswordToCredentialStructure(UserID uint64, password string) (error, []*user.UserCredential) {
 	// 1. 对密码进行bcrypt加密
-	bcryptHash, err := bcrypthash.HashPassword(password)
+	bcryptHash, err := util.Security.HashPassword(password)
 	if err != nil {
 		return err, nil // 加密失败时返回错误和空数组
 	}

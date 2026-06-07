@@ -9,7 +9,7 @@ import (
 	"miaoverse/model/dto/smsreq"
 	"miaoverse/model/server"
 	"miaoverse/service/i18n"
-	"miaoverse/service/security"
+	"miaoverse/util"
 )
 
 func SendSmsHandler(c fiber.Ctx, servants *server.Servants) error {
@@ -25,7 +25,7 @@ func SendSmsHandler(c fiber.Ctx, servants *server.Servants) error {
 		return resp.BadRequest(c)
 	}
 
-	valid, _ := security.ValidateAvalue(req.Timestamp)
+	valid, _ := util.Security.ValidateAvalue(req.Timestamp)
 	if !valid {
 		return c.Status(fiber.StatusBadRequest).JSON(resp.CodeWithMsg{
 			Code: fiber.StatusBadRequest,
