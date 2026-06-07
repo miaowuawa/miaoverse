@@ -17,22 +17,34 @@ import (
 )
 
 type Config struct {
-	Endpoint        string
-	Region          string
-	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
-	Bucket          string
-	PublicBaseURL   string
-	UsePathStyle    bool
+	Endpoint              string
+	Region                string
+	AccessKeyID           string
+	SecretAccessKey       string
+	SessionToken          string
+	Bucket                string
+	PublicBaseURL         string
+	UsePathStyle          bool
+	TempSignatureSecret   string
+	TempSignatureDuration time.Duration
+	TempLinkDuration      time.Duration
 }
 
 type Servant struct {
-	client        *awss3.Client
-	presigner     *awss3.PresignClient
-	bucket        string
-	publicBaseURL string
+	client              *awss3.Client
+	presigner           *awss3.PresignClient
+	bucket              string
+	publicBaseURL       string
+	tempSignatureSecret []byte
+	tempSignatureTTL    time.Duration
+	tempLinkTTL         time.Duration
 }
+
+const (
+	defaultTempSignatureDuration = 10 * time.Minute
+	defaultTempLinkDuration      = 5 * time.Minute
+	maxTempLinkDuration          = 7 * 24 * time.Hour
+)
 
 func NewServant(ctx context.Context, conf Config) (*Servant, error) {
 	if strings.TrimSpace(conf.Region) == "" {
@@ -46,6 +58,30 @@ func NewServant(ctx context.Context, conf Config) (*Servant, error) {
 	}
 	if strings.TrimSpace(conf.SecretAccessKey) == "" {
 		return nil, errors.New("s3 secret_access_key is required")
+	}
+	tempSignatureDuration, err := normalizeS3Duration(
+		conf.TempSignatureDuration,
+		defaultTempSignatureDuration,
+		"s3 temp signature duration",
+	)
+	if err != nil {
+		return nil, err
+	}
+	tempLinkDuration, err := normalizeS3Duration(
+		conf.TempLinkDuration,
+		defaultTempLinkDuration,
+		"s3 temp link duration",
+	)
+	if err != nil {
+		return nil, err
+	}
+	if tempLinkDuration > maxTempLinkDuration {
+		return nil, fmt.Errorf("s3 temp link duration must not exceed %s", maxTempLinkDuration)
+	}
+
+	tempSignatureSecret := strings.TrimSpace(conf.TempSignatureSecret)
+	if tempSignatureSecret == "" {
+		tempSignatureSecret = conf.SecretAccessKey
 	}
 
 	awsConf, err := awsconfig.LoadDefaultConfig(ctx,
@@ -68,10 +104,13 @@ func NewServant(ctx context.Context, conf Config) (*Servant, error) {
 	})
 
 	return &Servant{
-		client:        client,
-		presigner:     awss3.NewPresignClient(client),
-		bucket:        conf.Bucket,
-		publicBaseURL: strings.TrimRight(conf.PublicBaseURL, "/"),
+		client:              client,
+		presigner:           awss3.NewPresignClient(client),
+		bucket:              conf.Bucket,
+		publicBaseURL:       strings.TrimRight(conf.PublicBaseURL, "/"),
+		tempSignatureSecret: []byte(tempSignatureSecret),
+		tempSignatureTTL:    tempSignatureDuration,
+		tempLinkTTL:         tempLinkDuration,
 	}, nil
 }
 
@@ -218,4 +257,14 @@ func validateObjectInput(key string, body io.Reader) error {
 		return errors.New("s3 object body is required")
 	}
 	return nil
+}
+
+func normalizeS3Duration(value time.Duration, defaultValue time.Duration, name string) (time.Duration, error) {
+	if value == 0 {
+		return defaultValue, nil
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("%s must be greater than 0", name)
+	}
+	return value, nil
 }

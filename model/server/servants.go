@@ -16,4 +16,5 @@ type Servants struct {
 	Validator           *validator.Validate
 	UserServant         *user.UserDAO
 	S3Servant           *storages3.Servant
+	MaxUploadFileSize   int64
 }

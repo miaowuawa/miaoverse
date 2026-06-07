@@ -1,0 +1,117 @@
+package UserCheck
+
+import (
+	"miaoverse/consts"
+	modeluser "miaoverse/model/dao/user"
+	"miaoverse/model/server"
+)
+
+const (
+	activeUserStatus   uint8 = 1
+	bannedUserStatus   uint8 = 2
+	closedUserStatus   uint8 = 3
+	disabledUserStatus uint8 = 4
+)
+
+type Failure string
+
+const (
+	Pass                  Failure = ""
+	AccountBanned         Failure = "account_banned"
+	AccountClosed         Failure = "account_closed"
+	AccountDisabled       Failure = "account_disabled"
+	AccountUnavailable    Failure = "account_unavailable"
+	PhoneNotBound         Failure = "phone_not_bound"
+	PasswordNotSet        Failure = "password_not_set"
+	CertificationRequired Failure = "certification_required"
+)
+
+type Context struct {
+	UID         uint64
+	User        *modeluser.User
+	servants    *server.Servants
+	credentials map[uint8]bool
+}
+
+type Result struct {
+	Failure Failure
+	Err     error
+}
+
+type Check func(*Context) Result
+
+func NewContext(uid uint64, user *modeluser.User, servants *server.Servants) *Context {
+	return &Context{
+		UID:         uid,
+		User:        user,
+		servants:    servants,
+		credentials: map[uint8]bool{},
+	}
+}
+
+func OK() Result {
+	return Result{Failure: Pass}
+}
+
+func Failed(failure Failure) Result {
+	return Result{Failure: failure}
+}
+
+func (r Result) Passed() bool {
+	return r.Err == nil && r.Failure == Pass
+}
+
+func AccountActive() Check {
+	return func(ctx *Context) Result {
+		switch ctx.User.Status {
+		case activeUserStatus:
+			return OK()
+		case bannedUserStatus:
+			return Failed(AccountBanned)
+		case closedUserStatus:
+			return Failed(AccountClosed)
+		case disabledUserStatus:
+			return Failed(AccountDisabled)
+		default:
+			return Failed(AccountUnavailable)
+		}
+	}
+}
+
+func PhoneBound() Check {
+	return CredentialBound(consts.Phone, PhoneNotBound)
+}
+
+func PasswordSet() Check {
+	return CredentialBound(consts.Password, PasswordNotSet)
+}
+
+func Certified() Check {
+	return CredentialBound(consts.ThirdPartyWebAuthn, CertificationRequired)
+}
+
+func CredentialBound(credType uint8, failure Failure) Check {
+	return func(ctx *Context) Result {
+		ok, err := ctx.hasCredential(credType)
+		if err != nil {
+			return Result{Err: err}
+		}
+		if !ok {
+			return Failed(failure)
+		}
+		return OK()
+	}
+}
+
+func (ctx *Context) hasCredential(credType uint8) (bool, error) {
+	if ok, cached := ctx.credentials[credType]; cached {
+		return ok, nil
+	}
+
+	ok, err := ctx.servants.UserServant.HasCredential(ctx.UID, credType)
+	if err != nil {
+		return false, err
+	}
+	ctx.credentials[credType] = ok
+	return ok, nil
+}

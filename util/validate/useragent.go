@@ -17,7 +17,7 @@ func ParseUA(ua string) string {
 	}
 
 	// 第二步：判断是否为移动端/WAP
-	if consts.RegexpUaBot.MatchString(ua) {
+	if consts.RegexpUaWap.MatchString(ua) {
 		return UATypeWAP
 	}
 

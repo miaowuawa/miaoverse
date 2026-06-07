@@ -6,12 +6,11 @@
 
 - 基础地址：`http://{host}:{port}`
 - API 前缀：`/api/v1`
-- 请求体格式：除健康检查外，接口均使用 `Content-Type: application/json`
+- 请求体格式：除健康检查和文件上传外，接口均使用 `Content-Type: application/json`
 - 响应格式：JSON
 - 请求 ID：服务会在响应头中写入 `X-Miaoverse-ReqID`
 - Session Cookie：`mwu_sess_id`
 - 登录相关接口会写入或读取服务端 session。调用需要保持同一个 cookie，尤其是多账号选择流程。
-- 已登录桌面端请求会校验 `User-Agent` 是否与登录时一致；如果变化，服务会销毁 session 并返回 `403`。
 
 ## `a` 参数生成规则
 
@@ -245,7 +244,7 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/sms \
 | 状态码 | 场景 |
 | --- | --- |
 | `400` | 请求体不是 JSON、参数缺失、参数格式错误、`a` 超时或无效 |
-| `403` | 验证码错误、验证码不存在、验证码已过期，或已登录 session 的 User-Agent 变化 |
+| `403` | 验证码错误、验证码不存在或验证码已过期 |
 | `500` | Redis、数据库或 session 写入异常 |
 
 ## 选择登录账号
@@ -306,7 +305,7 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/choose \
 | 状态码 | 场景 |
 | --- | --- |
 | `400` | 请求体不是 JSON、参数缺失、没有待选择账号状态 |
-| `403` | 选择的 `uid` 不属于本次验证码验证通过的手机号，或已登录 session 的 User-Agent 变化 |
+| `403` | 选择的 `uid` 不属于本次验证码验证通过的手机号 |
 | `500` | 数据库或 session 写入异常 |
 
 ## 为手机号注册新账号
@@ -367,7 +366,7 @@ curl -i -X POST http://localhost:3000/api/v1/user/register/sms \
 | 状态码 | 场景 |
 | --- | --- |
 | `400` | 请求体不是 JSON、参数缺失、参数格式错误、`a` 超时或无效 |
-| `403` | 验证码错误、验证码不存在、验证码已过期，或已登录 session 的 User-Agent 变化 |
+| `403` | 验证码错误、验证码不存在或验证码已过期 |
 | `404` | 该手机号还没有任何账号 |
 | `500` | Redis、数据库或 session 写入异常 |
 
@@ -442,10 +441,110 @@ curl -i -X PATCH http://localhost:3000/api/v1/user/info \
 | --- | --- |
 | `400` | 请求体不是 JSON、字段为空、字段长度/取值不合法，或 PATCH 未包含任何可更新字段 |
 | `401` | 未登录或 session 中没有 `UID` |
-| `403` | 已登录 session 的 User-Agent 变化 |
 | `404` | session 中的用户不存在 |
 | `409` | `username` 或 `nickname` 等唯一字段与已有用户冲突 |
 | `500` | 数据库异常 |
+
+## 用户文件
+
+以下接口都挂在 `/api/v1/user` 登录态路由下，必须携带有效 `mwu_sess_id` cookie。
+
+### `POST /api/v1/user/files`
+
+上传当前登录用户的文件。文件会写入 S3，并在数据库 `files` 表中创建记录。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `multipart/form-data` |
+
+#### 表单字段
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | file | 是 | 要上传的文件 |
+| `file_type` | string | 否 | `image`、`video`、`audio`、`document`、`other`。不填时按 MIME 自动粗略识别 |
+
+上传大小由配置项 `upload.max_file_size_bytes` 控制，默认 `20971520` 字节。
+
+#### 请求示例
+
+```bash
+curl -i -X POST http://localhost:3000/api/v1/user/files \
+  -b cookie.txt \
+  -F "file=@/path/to/avatar.png" \
+  -F "file_type=image"
+```
+
+#### 成功响应
+
+状态码：`201 Created`
+
+```json
+{
+  "code": 201,
+  "msg": "上传成功",
+  "file": {
+    "uuid": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d",
+    "file_name": "avatar.png",
+    "file_url": "https://cdn.example.com/uploads/10001/15b3d25d-66cc-4ddc-9949-33c9e84d8c5d/avatar.png",
+    "file_type": "image",
+    "file_ext": "png",
+    "mime_type": "image/png",
+    "file_size": 12345,
+    "hash": "sha256hex...",
+    "created_at": "2026-06-07 12:00:00"
+  }
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 没有上传 `file` 字段或文件名无效 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `413` | 文件超过 `upload.max_file_size_bytes` |
+| `503` | S3 未启用或文件存储服务不可用 |
+| `500` | S3 上传或数据库写入异常 |
+
+### `GET /api/v1/user/files/:uuid/temp-link`
+
+通过文件 UUID 获取当前登录用户自己文件的 S3 临时访问链接。不能获取其他用户文件。
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d8c5d/temp-link \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "link": {
+    "uuid": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d",
+    "url": "https://s3.example.com/...",
+    "expires_at": "2026-06-07T12:05:00Z"
+  }
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | UUID 参数为空 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `404` | 文件不存在、已删除或不属于当前用户 |
+| `503` | S3 未启用或文件存储服务不可用 |
+| `500` | S3 临时链接生成或数据库查询异常 |
 
 ## 推荐调用流程
 
@@ -469,9 +568,11 @@ curl -i -X PATCH http://localhost:3000/api/v1/user/info \
 | 状态码 | 含义 |
 | --- | --- |
 | `200` | 请求成功 |
-| `201` | 创建成功并登录 |
+| `201` | 创建成功、注册成功或上传成功 |
 | `300` | 需要用户选择一个账号继续登录 |
 | `400` | 请求格式或参数错误 |
-| `403` | 验证失败、账号不匹配或登录环境变化 |
+| `403` | 验证失败、账号不匹配或账号状态不允许操作 |
 | `404` | 注册新账号时，该手机号还没有首个账号 |
+| `413` | 上传文件过大 |
+| `503` | 文件存储服务不可用 |
 | `500` | 服务端内部错误 |

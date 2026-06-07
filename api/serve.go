@@ -2,10 +2,12 @@ package api
 
 import (
 	"miaoverse/api/routers/v1/sms"
+	userfile "miaoverse/api/routers/v1/user/file"
 	"miaoverse/api/routers/v1/user/login"
 	"miaoverse/api/routers/v1/user/profile"
 	"miaoverse/middleware"
 	"miaoverse/model/server"
+	"miaoverse/service/UserCheck"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -44,11 +46,17 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	})
 
 	userGroup := v1.Group("/user")
-	userGroup.Use(middleware.RequireUser(servants, middleware.AccountActive()))
+	userGroup.Use(middleware.RequireUser(servants, UserCheck.AccountActive()))
 	userGroup.Put("/info", func(c fiber.Ctx) error {
 		return profile.UpdateFullHandler(c, servants)
 	})
 	userGroup.Patch("/info", func(c fiber.Ctx) error {
 		return profile.UpdatePartialHandler(c, servants)
+	})
+	userGroup.Post("/files", func(c fiber.Ctx) error {
+		return userfile.UploadHandler(c, servants)
+	})
+	userGroup.Get("/files/:uuid/temp-link", func(c fiber.Ctx) error {
+		return userfile.TempLinkHandler(c, servants)
 	})
 }

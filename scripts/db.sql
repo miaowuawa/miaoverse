@@ -35,8 +35,10 @@ CREATE TABLE IF NOT EXISTS `user_credentials` (
 
 CREATE TABLE IF NOT EXISTS `files` (
     `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'file id',
+    `uuid`          CHAR(36)        NOT NULL COMMENT 'public file uuid',
     `user_id`       BIGINT UNSIGNED NOT NULL COMMENT 'uploader user id',
     `file_name`     VARCHAR(255)    NOT NULL COMMENT 'original file name',
+    `object_key`    VARCHAR(500)    NOT NULL COMMENT 's3 object key',
     `file_url`      VARCHAR(500)    NOT NULL COMMENT 'file storage url',
     `file_type`     VARCHAR(20)     NOT NULL COMMENT 'image, video, audio, document, other',
     `file_ext`      VARCHAR(20)     NOT NULL DEFAULT '' COMMENT 'file extension: jpg, mp4, pdf etc.',
@@ -52,6 +54,7 @@ CREATE TABLE IF NOT EXISTS `files` (
     `created_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_files_uuid` (`uuid`),
     KEY `idx_files_user_id_status` (`user_id`, `status`),
     KEY `idx_files_file_type` (`file_type`),
     KEY `idx_files_hash` (`hash`),
@@ -60,4 +63,3 @@ CREATE TABLE IF NOT EXISTS `files` (
         FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='files storage';
-

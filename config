@@ -46,6 +46,12 @@ s3:
   bucket:
   public_base_url:
   use_path_style: true
+  temp_signature_secret:
+  temp_signature_expire_seconds: 600
+  temp_link_expire_seconds: 300
+
+upload:
+  max_file_size_bytes: 20971520
 
 cache:
   dbnum:

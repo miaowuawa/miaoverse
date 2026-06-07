@@ -6,7 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
-	mw "miaoverse/middleware"
+	"miaoverse/middleware"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/dto/user/updatereq"
 	"miaoverse/model/server"
@@ -24,7 +24,7 @@ func UpdateFullHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return badRequest(ctx)
 	}
 
-	uid, ok := mw.CurrentUID(ctx)
+	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
 		return unauthorized(ctx)
 	}
@@ -46,7 +46,7 @@ func UpdatePartialHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return badRequest(ctx)
 	}
 
-	uid, ok := mw.CurrentUID(ctx)
+	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
 		return unauthorized(ctx)
 	}

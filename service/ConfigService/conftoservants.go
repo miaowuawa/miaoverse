@@ -96,14 +96,17 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 	var s3Servant *storages3.Servant
 	if conf.S3.Enabled {
 		s3Servant, err = storages3.NewServant(context.Background(), storages3.Config{
-			Endpoint:        conf.S3.Endpoint,
-			Region:          conf.S3.Region,
-			AccessKeyID:     conf.S3.AccessKeyID,
-			SecretAccessKey: conf.S3.SecretAccessKey,
-			SessionToken:    conf.S3.SessionToken,
-			Bucket:          conf.S3.Bucket,
-			PublicBaseURL:   conf.S3.PublicBaseURL,
-			UsePathStyle:    conf.S3.UsePathStyle,
+			Endpoint:              conf.S3.Endpoint,
+			Region:                conf.S3.Region,
+			AccessKeyID:           conf.S3.AccessKeyID,
+			SecretAccessKey:       conf.S3.SecretAccessKey,
+			SessionToken:          conf.S3.SessionToken,
+			Bucket:                conf.S3.Bucket,
+			PublicBaseURL:         conf.S3.PublicBaseURL,
+			UsePathStyle:          conf.S3.UsePathStyle,
+			TempSignatureSecret:   conf.S3.TempSignatureSecret,
+			TempSignatureDuration: time.Duration(conf.S3.TempSignatureExpireSeconds) * time.Second,
+			TempLinkDuration:      time.Duration(conf.S3.TempLinkExpireSeconds) * time.Second,
 		})
 		if err != nil {
 			return nil, err
@@ -118,6 +121,7 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		UserServant:         userdao,
 		Validator:           validator,
 		S3Servant:           s3Servant,
+		MaxUploadFileSize:   conf.UploadMaxFileSizeBytes(),
 	}, nil
 
 }

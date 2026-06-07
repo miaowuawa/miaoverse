@@ -40,16 +40,22 @@ type AppConfig struct {
 		DB       int    `yaml:"dbnum"`
 	} `yaml:"smsbao"`
 	S3 struct {
-		Enabled         bool   `yaml:"enabled"`
-		Endpoint        string `yaml:"endpoint"`
-		Region          string `yaml:"region"`
-		AccessKeyID     string `yaml:"access_key_id"`
-		SecretAccessKey string `yaml:"secret_access_key"`
-		SessionToken    string `yaml:"session_token"`
-		Bucket          string `yaml:"bucket"`
-		PublicBaseURL   string `yaml:"public_base_url"`
-		UsePathStyle    bool   `yaml:"use_path_style"`
+		Enabled                    bool   `yaml:"enabled"`
+		Endpoint                   string `yaml:"endpoint"`
+		Region                     string `yaml:"region"`
+		AccessKeyID                string `yaml:"access_key_id"`
+		SecretAccessKey            string `yaml:"secret_access_key"`
+		SessionToken               string `yaml:"session_token"`
+		Bucket                     string `yaml:"bucket"`
+		PublicBaseURL              string `yaml:"public_base_url"`
+		UsePathStyle               bool   `yaml:"use_path_style"`
+		TempSignatureSecret        string `yaml:"temp_signature_secret"`
+		TempSignatureExpireSeconds int    `yaml:"temp_signature_expire_seconds"`
+		TempLinkExpireSeconds      int    `yaml:"temp_link_expire_seconds"`
 	} `yaml:"s3"`
+	Upload struct {
+		MaxFileSizeBytes int64 `yaml:"max_file_size_bytes"`
+	} `yaml:"upload"`
 	Cache struct {
 		DB int `yaml:"dbnum"`
 	}

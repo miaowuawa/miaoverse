@@ -1,14 +1,14 @@
 package middleware
 
 import (
+	"miaoverse/model/server"
+	"time"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/extractors"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 	"github.com/gofiber/fiber/v3/middleware/session"
 	"github.com/gofiber/utils/v2"
-	"miaoverse/model/server"
-	"miaoverse/service/security/account"
-	"time"
 )
 
 func Initial(app *fiber.App, servant *server.Servants) {
@@ -29,8 +29,4 @@ func Initial(app *fiber.App, servant *server.Servants) {
 			Extractor:       extractors.FromCookie("mwu_sess_id"),
 			Storage:         servant.FiberSessionStorage,
 		}))
-
-	app.Use(func(ctx fiber.Ctx) error {
-		return account.AntiCookieCopy(ctx)
-	})
 }

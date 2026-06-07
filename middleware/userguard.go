@@ -5,10 +5,10 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
-	"miaoverse/consts"
 	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
+	"miaoverse/service/UserCheck"
 	"miaoverse/service/UserSession"
 	"miaoverse/service/i18n"
 )
@@ -18,28 +18,7 @@ const (
 	uidLocalKey  = "miaoverse.uid"
 )
 
-const (
-	activeUserStatus   uint8 = 1
-	bannedUserStatus   uint8 = 2
-	closedUserStatus   uint8 = 3
-	disabledUserStatus uint8 = 4
-)
-
-type UserContext struct {
-	UID         uint64
-	User        *modeluser.User
-	servants    *server.Servants
-	credentials map[uint8]bool
-}
-
-type UserCheck func(fiber.Ctx, *UserContext) *userGuardReject
-
-type userGuardReject struct {
-	status int
-	msg    i18n.MessageKey
-}
-
-func RequireUser(servants *server.Servants, checks ...UserCheck) fiber.Handler {
+func RequireUser(servants *server.Servants, checks ...UserCheck.Check) fiber.Handler {
 	return func(ctx fiber.Ctx) error {
 		uid, ok := UserSession.CurrentUID(ctx)
 		if !ok {
@@ -54,12 +33,7 @@ func RequireUser(servants *server.Servants, checks ...UserCheck) fiber.Handler {
 			return rejectUserGuard(ctx, fiber.StatusInternalServerError, i18n.ErrServerContactAdmin)
 		}
 
-		userCtx := &UserContext{
-			UID:         uid,
-			User:        u,
-			servants:    servants,
-			credentials: map[uint8]bool{},
-		}
+		userCtx := UserCheck.NewContext(uid, u, servants)
 		ctx.Locals(uidLocalKey, uid)
 		ctx.Locals(userLocalKey, userCtx)
 
@@ -67,9 +41,14 @@ func RequireUser(servants *server.Servants, checks ...UserCheck) fiber.Handler {
 			if check == nil {
 				continue
 			}
-			if reject := check(ctx, userCtx); reject != nil {
-				return rejectUserGuard(ctx, reject.status, reject.msg)
+			result := check(userCtx)
+			if result.Passed() {
+				continue
 			}
+			if result.Err != nil {
+				return rejectUserGuard(ctx, fiber.StatusInternalServerError, i18n.ErrServerContactAdmin)
+			}
+			return rejectUserGuard(ctx, fiber.StatusForbidden, failureMessage(result.Failure))
 		}
 
 		return ctx.Next()
@@ -84,66 +63,30 @@ func CurrentUID(ctx fiber.Ctx) (uint64, bool) {
 }
 
 func CurrentUser(ctx fiber.Ctx) (*modeluser.User, bool) {
-	userCtx, ok := ctx.Locals(userLocalKey).(*UserContext)
+	userCtx, ok := ctx.Locals(userLocalKey).(*UserCheck.Context)
 	if !ok || userCtx == nil || userCtx.User == nil {
 		return nil, false
 	}
 	return userCtx.User, true
 }
 
-func AccountActive() UserCheck {
-	return func(_ fiber.Ctx, userCtx *UserContext) *userGuardReject {
-		switch userCtx.User.Status {
-		case activeUserStatus:
-			return nil
-		case bannedUserStatus:
-			return &userGuardReject{status: fiber.StatusForbidden, msg: i18n.ErrAccountBanned}
-		case closedUserStatus:
-			return &userGuardReject{status: fiber.StatusForbidden, msg: i18n.ErrAccountClosed}
-		case disabledUserStatus:
-			return &userGuardReject{status: fiber.StatusForbidden, msg: i18n.ErrAccountDisabled}
-		default:
-			return &userGuardReject{status: fiber.StatusForbidden, msg: i18n.ErrAccountUnavailable}
-		}
+func failureMessage(failure UserCheck.Failure) i18n.MessageKey {
+	switch failure {
+	case UserCheck.AccountBanned:
+		return i18n.ErrAccountBanned
+	case UserCheck.AccountClosed:
+		return i18n.ErrAccountClosed
+	case UserCheck.AccountDisabled:
+		return i18n.ErrAccountDisabled
+	case UserCheck.PhoneNotBound:
+		return i18n.ErrPhoneNotBound
+	case UserCheck.PasswordNotSet:
+		return i18n.ErrPasswordNotSet
+	case UserCheck.CertificationRequired:
+		return i18n.ErrCertificationRequired
+	default:
+		return i18n.ErrAccountUnavailable
 	}
-}
-
-func PhoneBound() UserCheck {
-	return CredentialBound(consts.Phone, i18n.ErrPhoneNotBound)
-}
-
-func PasswordSet() UserCheck {
-	return CredentialBound(consts.Password, i18n.ErrPasswordNotSet)
-}
-
-func Certified() UserCheck {
-	return CredentialBound(consts.ThirdPartyWebAuthn, i18n.ErrCertificationRequired)
-}
-
-func CredentialBound(credType uint8, msg i18n.MessageKey) UserCheck {
-	return func(_ fiber.Ctx, userCtx *UserContext) *userGuardReject {
-		ok, err := userCtx.hasCredential(credType)
-		if err != nil {
-			return &userGuardReject{status: fiber.StatusInternalServerError, msg: i18n.ErrServerContactAdmin}
-		}
-		if !ok {
-			return &userGuardReject{status: fiber.StatusForbidden, msg: msg}
-		}
-		return nil
-	}
-}
-
-func (u *UserContext) hasCredential(credType uint8) (bool, error) {
-	if ok, cached := u.credentials[credType]; cached {
-		return ok, nil
-	}
-
-	ok, err := u.servants.UserServant.HasCredential(u.UID, credType)
-	if err != nil {
-		return false, err
-	}
-	u.credentials[credType] = ok
-	return ok, nil
 }
 
 func rejectUserGuard(ctx fiber.Ctx, status int, msg i18n.MessageKey) error {

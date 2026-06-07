@@ -18,26 +18,29 @@ type MessageKey string
 const (
 	LangZhCN = "zh-CN"
 
-	ErrBadRequest             MessageKey = "error.bad_request"
-	ErrRequestTimeout         MessageKey = "error.request_timeout"
-	ErrServerInternal         MessageKey = "error.server_internal"
-	ErrServerContactAdmin     MessageKey = "error.server_contact_admin"
-	ErrSMSProvider            MessageKey = "error.sms_provider"
-	ErrSMSCodeInvalid         MessageKey = "error.sms_code_invalid"
-	ErrPhoneHasNoAccount      MessageKey = "error.phone_has_no_account"
-	ErrNoPendingLoginAccount  MessageKey = "error.no_pending_login_account"
-	ErrAccountNotBelongPhone  MessageKey = "error.account_not_belong_phone"
-	ErrLoginEnvironmentChange MessageKey = "error.login_environment_change"
-	ErrUnauthorized           MessageKey = "error.unauthorized"
-	ErrUserNotFound           MessageKey = "error.user_not_found"
-	ErrUserInfoConflict       MessageKey = "error.user_info_conflict"
-	ErrAccountBanned          MessageKey = "error.account_banned"
-	ErrAccountClosed          MessageKey = "error.account_closed"
-	ErrAccountDisabled        MessageKey = "error.account_disabled"
-	ErrAccountUnavailable     MessageKey = "error.account_unavailable"
-	ErrPhoneNotBound          MessageKey = "error.phone_not_bound"
-	ErrPasswordNotSet         MessageKey = "error.password_not_set"
-	ErrCertificationRequired  MessageKey = "error.certification_required"
+	ErrBadRequest            MessageKey = "error.bad_request"
+	ErrRequestTimeout        MessageKey = "error.request_timeout"
+	ErrServerInternal        MessageKey = "error.server_internal"
+	ErrServerContactAdmin    MessageKey = "error.server_contact_admin"
+	ErrSMSProvider           MessageKey = "error.sms_provider"
+	ErrSMSCodeInvalid        MessageKey = "error.sms_code_invalid"
+	ErrPhoneHasNoAccount     MessageKey = "error.phone_has_no_account"
+	ErrNoPendingLoginAccount MessageKey = "error.no_pending_login_account"
+	ErrAccountNotBelongPhone MessageKey = "error.account_not_belong_phone"
+	ErrUnauthorized          MessageKey = "error.unauthorized"
+	ErrUserNotFound          MessageKey = "error.user_not_found"
+	ErrUserInfoConflict      MessageKey = "error.user_info_conflict"
+	ErrAccountBanned         MessageKey = "error.account_banned"
+	ErrAccountClosed         MessageKey = "error.account_closed"
+	ErrAccountDisabled       MessageKey = "error.account_disabled"
+	ErrAccountUnavailable    MessageKey = "error.account_unavailable"
+	ErrPhoneNotBound         MessageKey = "error.phone_not_bound"
+	ErrPasswordNotSet        MessageKey = "error.password_not_set"
+	ErrCertificationRequired MessageKey = "error.certification_required"
+	ErrInvalidReferrer       MessageKey = "error.invalid_referrer"
+	ErrFileTooLarge          MessageKey = "error.file_too_large"
+	ErrFileNotFound          MessageKey = "error.file_not_found"
+	ErrS3Unavailable         MessageKey = "error.s3_unavailable"
 
 	OKSMSSent              MessageKey = "ok.sms_sent"
 	OKLogin                MessageKey = "ok.login"
@@ -45,6 +48,8 @@ const (
 	OKNewAccountAndLogin   MessageKey = "ok.new_account_and_login"
 	OKChooseLoginAccount   MessageKey = "ok.choose_login_account"
 	OKUserInfoUpdated      MessageKey = "ok.user_info_updated"
+	OKFileUploaded         MessageKey = "ok.file_uploaded"
+	OKFileTempLink         MessageKey = "ok.file_temp_link"
 	SMSActionLoginRegister MessageKey = "sms.action.login_register"
 )
 
@@ -358,26 +363,26 @@ func resetCatalog() {
 	defaultLanguage = LangZhCN
 	catalog = map[string]map[MessageKey]message{
 		LangZhCN: {
-			ErrBadRequest:             {Other: "请求错误，请检查参数"},
-			ErrRequestTimeout:         {Other: "请求超时，请重新尝试"},
-			ErrServerInternal:         {Other: "服务器内部错误，请稍后重试"},
-			ErrServerContactAdmin:     {Other: "服务器异常，请联系管理员"},
-			ErrSMSProvider:            {Other: "返回异常：{{error}}请联系管理人员！"},
-			ErrSMSCodeInvalid:         {Other: "验证码错误或不存在，请重试"},
-			ErrPhoneHasNoAccount:      {Other: "该手机号还没有账号，请使用短信登录自动注册首个账号"},
-			ErrNoPendingLoginAccount:  {Other: "没有待选择的登录账号，请重新验证码登录"},
-			ErrAccountNotBelongPhone:  {Other: "账号不属于本次验证的手机号"},
-			ErrLoginEnvironmentChange: {Other: "登录环境变化，请重新登录！"},
-			ErrUnauthorized:           {Other: "请先登录"},
-			ErrUserNotFound:           {Other: "用户不存在"},
-			ErrUserInfoConflict:       {Other: "用户信息已存在冲突，请更换后重试"},
-			ErrAccountBanned:          {Other: "账号被封禁，无法继续操作"},
-			ErrAccountClosed:          {Other: "账号已注销，无法继续操作"},
-			ErrAccountDisabled:        {Other: "账号被临时禁用，无法继续操作"},
-			ErrAccountUnavailable:     {Other: "账号状态异常，无法继续操作"},
-			ErrPhoneNotBound:          {Other: "先绑定手机号再操作哦～"},
-			ErrPasswordNotSet:         {Other: "先设置密码再操作哦～"},
-			ErrCertificationRequired:  {Other: "先完成账号认证再操作哦～"},
+			ErrBadRequest:            {Other: "请求错误，请检查参数"},
+			ErrRequestTimeout:        {Other: "请求超时，请重新尝试"},
+			ErrServerInternal:        {Other: "服务器内部错误，请稍后重试"},
+			ErrServerContactAdmin:    {Other: "服务器异常，请联系管理员"},
+			ErrSMSProvider:           {Other: "返回异常：{{error}}请联系管理人员！"},
+			ErrSMSCodeInvalid:        {Other: "验证码错误或不存在，请重试"},
+			ErrPhoneHasNoAccount:     {Other: "该手机号还没有账号，请使用短信登录自动注册首个账号"},
+			ErrNoPendingLoginAccount: {Other: "没有待选择的登录账号，请重新验证码登录"},
+			ErrAccountNotBelongPhone: {Other: "账号不属于本次验证的手机号"},
+			ErrUnauthorized:          {Other: "请先登录"},
+			ErrUserNotFound:          {Other: "用户不存在"},
+			ErrUserInfoConflict:      {Other: "用户信息已存在冲突，请更换后重试"},
+			ErrAccountBanned:         {Other: "账号被封禁，无法继续操作"},
+			ErrAccountClosed:         {Other: "账号已注销，无法继续操作"},
+			ErrAccountDisabled:       {Other: "账号被临时禁用，无法继续操作"},
+			ErrAccountUnavailable:    {Other: "账号状态异常，无法继续操作"},
+			ErrPhoneNotBound:         {Other: "先绑定手机号再操作哦～"},
+			ErrPasswordNotSet:        {Other: "先设置密码再操作哦～"},
+			ErrCertificationRequired: {Other: "先完成账号认证再操作哦～"},
+			ErrInvalidReferrer:       {Other: "请求来源不可信，请从正确页面重新操作"},
 
 			OKSMSSent:              {Other: "发送成功"},
 			OKLogin:                {Other: "登录成功"},
