@@ -3,16 +3,24 @@ package UserFile
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
+	"miaoverse/dao/interacts"
 	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/dto/resp"
+	"miaoverse/service/UserBlock"
 	storages3 "miaoverse/service/s3"
 )
 
 const TimeFormat = "2006-01-02 15:04:05"
+
+var (
+	ErrFileNotShared      = errors.New("file is not shared")
+	ErrFileBlockedByOwner = errors.New("file blocked by owner")
+)
 
 func BuildObjectKey(uid uint32, fileUUID string, fileName string) string {
 	return fmt.Sprintf("uploads/%d/%s/%s", uid, fileUUID, fileName)
@@ -83,4 +91,46 @@ func BuildSharedTempLink(ctx context.Context, s3 *storages3.Servant, requesterUI
 		URL:       link.URL,
 		ExpiresAt: link.ExpiresAt,
 	}, nil
+}
+
+// CheckSharedAccess 校验查看者是否有权访问他人文件。
+// 被查看的用户拉黑了查看者时，无论文件是否公开都拒绝；
+// 否则按文件分享权限（公开/好友/粉丝/不公开）判定。
+func CheckSharedAccess(ctx context.Context, block *UserBlock.Servant, interactsServant *interacts.InteractsDAO, requesterUID uint32, ownerUID uint32, permission uint8) error {
+	if requesterUID == ownerUID {
+		return nil
+	}
+
+	blocked, err := block.Contains(ctx, ownerUID, UserBlock.BlockTypeBlock, requesterUID)
+	if err != nil {
+		return err
+	}
+	if blocked {
+		return ErrFileBlockedByOwner
+	}
+
+	switch permission {
+	case modeluser.FilePermissionPublic:
+		return nil
+	case modeluser.FilePermissionFriends:
+		following, err := interactsServant.IsFollowing(requesterUID, ownerUID)
+		if err != nil {
+			return err
+		}
+		if !following {
+			return ErrFileNotShared
+		}
+		return nil
+	case modeluser.FilePermissionFans:
+		following, err := interactsServant.IsFollowing(ownerUID, requesterUID)
+		if err != nil {
+			return err
+		}
+		if !following {
+			return ErrFileNotShared
+		}
+		return nil
+	default:
+		return ErrFileNotShared
+	}
 }

@@ -40,3 +40,13 @@ func (d *InteractsDAO) QueryInteractsByUser(userFrom uint32, offset, limit int) 
 		Find(&list).Error
 	return list, err
 }
+
+// IsFollowing 查询 userFrom 是否正在关注 userTo（status 为正常）
+func (d *InteractsDAO) IsFollowing(userFrom uint32, userTo uint32) (bool, error) {
+	var count int64
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Where("user_from = ? AND user_to = ? AND type = ? AND status = ?",
+			userFrom, userTo, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		Count(&count).Error
+	return count > 0, err
+}

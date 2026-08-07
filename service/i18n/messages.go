@@ -40,6 +40,11 @@ const (
 	ErrInvalidReferrer       MessageKey = "error.invalid_referrer"
 	ErrFileTooLarge          MessageKey = "error.file_too_large"
 	ErrFileNotFound          MessageKey = "error.file_not_found"
+	ErrFileNotShared         MessageKey = "error.file_not_shared"
+	ErrFileBlockedByOwner    MessageKey = "error.file_blocked_by_owner"
+	ErrBlockedByRelation     MessageKey = "error.blocked_by_relation"
+	ErrPunished              MessageKey = "error.punished"
+	ErrTargetPunished        MessageKey = "error.target_punished"
 	ErrS3Unavailable         MessageKey = "error.s3_unavailable"
 
 	OKSMSSent              MessageKey = "ok.sms_sent"
@@ -52,6 +57,10 @@ const (
 	OKFileTempLink         MessageKey = "ok.file_temp_link"
 	OKMomentPublished      MessageKey = "ok.moment_published"
 	OKBlockUpdated         MessageKey = "ok.block_updated"
+	OKContentList          MessageKey = "ok.content_list"
+	OKUserInfoFetched      MessageKey = "ok.user_info_fetched"
+	OKCommentCreated       MessageKey = "ok.comment_created"
+	OKPunishmentsFetched   MessageKey = "ok.punishments_fetched"
 	SMSActionLoginRegister MessageKey = "sms.action.login_register"
 )
 
@@ -385,6 +394,11 @@ func resetCatalog() {
 			ErrPasswordNotSet:        {Other: "先设置密码再操作哦～"},
 			ErrCertificationRequired: {Other: "先完成账号认证再操作哦～"},
 			ErrInvalidReferrer:       {Other: "操作失败啦，请再次打开页面重新操作"},
+			ErrFileNotShared:         {Other: "此文件并未公开分享，请检查登录账号"},
+			ErrFileBlockedByOwner:    {Other: "由于对方权限设置，无法查看此文件"},
+			ErrBlockedByRelation:     {Other: "由于对方权限设置，无法查看此内容"},
+			ErrPunished:              {Other: "账号封禁期间无法执行此操作"},
+			ErrTargetPunished:        {Other: "该用户存在违规记录，部分功能受限"},
 
 			OKSMSSent:              {Other: "发送成功"},
 			OKLogin:                {Other: "登录成功"},
@@ -394,6 +408,10 @@ func resetCatalog() {
 			OKUserInfoUpdated:      {Other: "用户信息修改成功"},
 			OKMomentPublished:      {Other: "发布成功"},
 			OKBlockUpdated:         {Other: "操作成功"},
+			OKContentList:          {Other: "获取成功"},
+			OKUserInfoFetched:      {Other: "获取成功"},
+			OKCommentCreated:       {Other: "评论成功"},
+			OKPunishmentsFetched:   {Other: "获取成功"},
 			SMSActionLoginRegister: {Other: "登录或注册"},
 		},
 	}

@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"miaoverse/dao/content"
+	"miaoverse/dao/interacts"
 	"miaoverse/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
@@ -93,6 +94,10 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 	contentdao := &content.ContentDAO{}
 	contentdao.DB = db
 
+	//init interacts DAO
+	interactsdao := &interacts.InteractsDAO{}
+	interactsdao.DB = db
+
 	//init user block bitmap servant
 	blockServant := UserBlock.NewServant(smsRedisClient, conf.Cache.DB)
 	//step3 validator
@@ -129,6 +134,7 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		CodeManager:         codeManager,
 		UserServant:         userdao,
 		ContentServant:      contentdao,
+		InteractsServant:    interactsdao,
 		BlockServant:        blockServant,
 		Validator:           validator,
 		S3Servant:           s3Servant,

@@ -466,6 +466,7 @@ curl -i -X PATCH http://localhost:3000/api/v1/user/info \
 | --- | --- | --- | --- |
 | `file` | file | 是 | 要上传的文件 |
 | `file_type` | string | 否 | `image`、`video`、`audio`、`document`、`other`。不填时按 MIME 自动粗略识别 |
+| `permission` | number | 否 | 分享权限：`0` 给全部人公开，`1` 给好友公开，`2` 不给任何人公开（默认），`3` 给粉丝公开 |
 
 上传大小由配置项 `upload.max_file_size_bytes` 控制，默认 `20971520` 字节。
 
@@ -551,6 +552,14 @@ curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d
 
 通过文件 UUID 获取任意用户 active 文件的 S3 临时访问链接，用于帖子等场景查看/下载其他用户的文件或媒体。临时链接绑定当前登录用户身份，且只对 active 状态的文件生效。
 
+访问控制规则：
+
+- 文件所有者拉黑了当前查看者时，无论文件是否公开，都返回 `403`，提示「由于对方权限设置，无法查看此文件」。
+- 文件分享权限为 `0`（全部人公开）时，任何登录用户可访问。
+- 文件分享权限为 `1`（好友公开）时，仅当前查看者关注了文件所有者才可访问。
+- 文件分享权限为 `3`（粉丝公开）时，仅文件所有者关注了当前查看者才可访问。
+- 文件分享权限为 `2`（不公开）或不符合上述条件时，返回 `403`，提示「此文件并未公开分享，请检查登录账号」。
+
 #### 请求示例
 
 ```bash
@@ -580,6 +589,7 @@ curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d
 | --- | --- |
 | `400` | UUID 参数为空或格式非法 |
 | `401` | 未登录或 session 中没有 `UID` |
+| `403` | 文件未公开分享（「此文件并未公开分享，请检查登录账号」），或文件所有者拉黑了查看者（「由于对方权限设置，无法查看此文件」） |
 | `404` | 文件不存在或已删除（非 active 状态） |
 | `503` | S3 未启用或文件存储服务不可用 |
 | `500` | S3 临时链接生成或数据库查询异常 |
@@ -720,6 +730,286 @@ curl -i -X POST http://localhost:3000/api/v1/user/blocks \
 | `400` | 请求体不是 JSON、`target` 为 0 或等于当前用户、`type` 非法、`action` 不是 `add`/`remove` |
 | `401` | 未登录或 session 中没有 `UID` |
 | `500` | Redis 读写异常 |
+
+## 获取其他用户内容列表
+
+以下接口用于获取其他用户发布的内容（当前为动态）。先请求数量，再分页获取列表。
+
+### `GET /api/v1/user/users/:uid/contents/count`
+
+获取目标用户对当前登录用户可见的内容数量。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/user/users/20002/contents/count \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "count": 12
+}
+```
+
+### `GET /api/v1/user/users/:uid/contents`
+
+分页获取目标用户对当前登录用户可见的内容列表。
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `offset` | number | 否 | 偏移量，默认 `0` |
+| `limit` | number | 否 | 每页数量，默认 `20`，最大 `100` |
+
+#### 请求示例
+
+```bash
+curl -i "http://localhost:3000/api/v1/user/users/20002/contents?offset=0&limit=20" \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "contents": [
+    {
+      "id": 1,
+      "type": "moment",
+      "comment": 3,
+      "like": 5
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | number | 内容 ID |
+| `type` | string | 内容类型，当前为 `moment` |
+| `comment` | number | 评论数 |
+| `like` | number | 点赞数 |
+
+#### 可见性规则
+
+- 公开（`permission=0`）动态对所有人可见。
+- 仅好友（`permission=1`）动态仅对互相关注的查看者可见。
+- 仅粉丝（`permission=3`）动态仅对目标用户关注了的查看者可见。
+- 仅自己（`permission=2`）动态仅本人可见。
+- 草稿、已删除等非正常状态动态不返回。
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `uid` 非法、`offset`/`limit` 取值非法 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 查看者与目标用户存在任意一方的拉黑关系，body 中 `code` 为 `40301`（见 `API-errors.md`） |
+| `500` | 数据库查询异常 |
+
+## 获取其他用户信息
+
+### `GET /api/v1/user/users/:uid/info`
+
+获取目标用户的公开资料，并附带当前登录用户对目标用户的拉黑/屏蔽/不想看关系状态。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/user/users/20002/info \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "user": {
+    "id": 20002,
+    "username": "user_xxx",
+    "nickname": "nickname_xxx",
+    "region": 86,
+    "avatar": "",
+    "gender": 0,
+    "status": 1,
+    "created_at": "2026-06-01T12:00:00+08:00",
+    "updated_at": "2026-06-01T12:00:00+08:00",
+    "block_status": 1,
+    "punishment_mask": 2
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `user` | object | 目标用户资料，字段与 `user` 表一致 |
+| `user.block_status` | number | 当前登录用户对目标用户的关系状态（位组合）：`0` 无关系，`1` 拉黑，`2` 屏蔽，`4` 不想看；可组合，如 `3` 表示拉黑+屏蔽 |
+| `user.punishment_mask` | number | 目标用户当前生效中的权限封禁位掩码（十进制，按位或合并）：bit0(1) 评论，bit1(2) 发布动态，bit2(4) 私信，bit3(8) 头像，bit4(16) 昵称，bit5(32) 签名，bit6(64) 社交互动，bit7(128) 注销/注册，bit8(256) 上传文件。`0` 表示无生效封禁。前端可据此展示「该用户被禁止发送评论」等提示 |
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `uid` 非法 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 目标用户账号被封禁（`user.status = 2`），body 中 `code` 为 `40304`（见 `API-errors.md`） |
+| `404` | 目标用户不存在 |
+| `500` | 数据库或 Redis 查询异常 |
+
+## 评论动态
+
+### `POST /api/v1/user/comments`
+
+给动态发送评论。会写入 `comment` 表并原子自增 `moment_meta.comment_count`。被拉黑/拉黑对方、评论权限不允许、或被封禁评论权限时拒绝。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "moment_id": 1,
+  "content": "写得好"
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+| --- | --- | --- | --- | --- |
+| `moment_id` | number | 是 | 大于 0 | 目标动态 ID |
+| `content` | string | 是 | 非空，最长 1000 字符 | 评论内容 |
+
+#### 成功响应
+
+状态码：`201 Created`
+
+```json
+{
+  "code": 201,
+  "msg": "评论成功",
+  "comment": {
+    "id": 1,
+    "user_id": 10001,
+    "moment_id": 1,
+    "content": "写得好",
+    "status": 0,
+    "created_at": "2026-06-07 12:00:00"
+  }
+}
+```
+
+#### 评论权限规则
+
+- 动态评论权限 `0`（全部可评论）：任何登录用户可评论。
+- `1`（仅好友）：仅与动态作者互相关注的用户可评论。
+- `2`（仅粉丝）：仅动态作者关注了的用户可评论。
+- `3`（全部不可评论）：所有人都不能评论。
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、`moment_id` 为 0、`content` 为空或超长 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 评论权限封禁（`code` 为 `40302`）；拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`） |
+| `404` | 动态不存在或已删除 |
+| `500` | 数据库异常 |
+
+## 查询本人惩罚记录
+
+### `GET /api/v1/user/punishments`
+
+查询当前登录用户本人的全部惩罚记录。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/user/punishments \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "punishments": [
+    {
+      "id": 1,
+      "user_id": 10001,
+      "punishment_type": 2,
+      "punishment_status": 1,
+      "punishment_time": "2026-06-07T12:00:00+08:00",
+      "punishment_end_time": "2026-06-14T12:00:00+08:00",
+      "punishment_reason": "发布违规内容",
+      "punishment_operator": 0,
+      "punishment_remark": ""
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `punishment_type` | number | 被封禁权限的十进制位掩码，需自行解析二进制：bit0(1) 评论，bit1(2) 发布动态，bit2(4) 私信，bit3(8) 头像，bit4(16) 昵称，bit5(32) 签名，bit6(64) 社交互动，bit7(128) 注销/注册，bit8(256) 上传文件 |
+| `punishment_status` | number | `1` 生效中，`2` 已到期，`3` 已撤销 |
+| `punishment_end_time` | string/null | 封禁结束时间，`null` 表示永久 |
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `401` | 未登录或 session 中没有 `UID` |
+| `500` | 数据库查询异常 |
 
 ## 推荐调用流程
 

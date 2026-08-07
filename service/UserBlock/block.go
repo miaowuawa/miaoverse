@@ -104,6 +104,34 @@ func (s *Servant) Contains(ctx context.Context, userID uint32, blockType BlockTy
 	return bitmap.Contains(targetUserID), nil
 }
 
+// IsBlockedEither 判断 a 与 b 之间是否存在任意一方的拉黑关系（a 拉黑 b 或 b 拉黑 a）。
+func (s *Servant) IsBlockedEither(ctx context.Context, a uint32, b uint32) (bool, error) {
+	blocked, err := s.Contains(ctx, a, BlockTypeBlock, b)
+	if err != nil {
+		return false, err
+	}
+	if blocked {
+		return true, nil
+	}
+	return s.Contains(ctx, b, BlockTypeBlock, a)
+}
+
+// GetBlockStatus 计算 userID 对 targetID 的关系状态（位组合）：
+// bit0(1) 拉黑，bit1(2) 屏蔽，bit2(4) 不想看；0 表示无任何关系。
+func (s *Servant) GetBlockStatus(ctx context.Context, userID uint32, targetID uint32) (uint8, error) {
+	var status uint8
+	for _, blockType := range []BlockType{BlockTypeBlock, BlockTypeMute, BlockTypeUnwatch} {
+		contained, err := s.Contains(ctx, userID, blockType, targetID)
+		if err != nil {
+			return 0, err
+		}
+		if contained {
+			status |= 1 << (blockType - 1)
+		}
+	}
+	return status, nil
+}
+
 // Count 返回 userID 指定关系 Bitmap 中的用户数量。
 func (s *Servant) Count(ctx context.Context, userID uint32, blockType BlockType) (uint64, error) {
 	key, err := s.BlockKey(userID, blockType)

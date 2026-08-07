@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS `files` (
     `file_ext`      VARCHAR(20)     NOT NULL DEFAULT '' COMMENT 'file extension: jpg, mp4, pdf etc.',
     `mime_type`     VARCHAR(100)    NOT NULL DEFAULT '' COMMENT 'MIME type: image/jpeg, video/mp4',
     `file_size`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'file size in bytes',
+    `permission`    TINYINT UNSIGNED NOT NULL DEFAULT 2 COMMENT '0 public, 1 friends, 2 none, 3 fans',
     `width`         INT UNSIGNED    NULL DEFAULT NULL COMMENT 'image/video width in pixels',
     `height`        INT UNSIGNED    NULL DEFAULT NULL COMMENT 'image/video height in pixels',
     `duration`      INT UNSIGNED    NULL DEFAULT NULL COMMENT 'video/audio duration in seconds',
@@ -155,3 +156,21 @@ CREATE TABLE IF NOT EXISTS `notify` (
         FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='notifications';
+
+CREATE TABLE IF NOT EXISTS `punishment` (
+    `id`                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'punishment record id',
+    `user_id`            INT UNSIGNED    NOT NULL COMMENT 'punished user id',
+    `punishment_type`    INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT 'permission bitmask: bit0 comment, bit1 post, bit2 private msg, bit3 avatar, bit4 nickname, bit5 signature, bit6 social, bit7 delete/register, bit8 upload file',
+    `punishment_status`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1 active, 2 ended, 3 revoked',
+    `punishment_time`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'when punishment started',
+    `punishment_end_time` DATETIME       NULL DEFAULT NULL COMMENT 'when punishment ends, NULL means permanent',
+    `punishment_reason`  VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'punish reason',
+    `punishment_operator` INT UNSIGNED   NOT NULL DEFAULT 0 COMMENT 'operator user id, 0 for system',
+    `punishment_remark`  VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'extra remark',
+    PRIMARY KEY (`id`),
+    KEY `idx_punishment_user_id_status` (`user_id`, `punishment_status`),
+    KEY `idx_punishment_end_time` (`punishment_end_time`),
+    CONSTRAINT `fk_punishment_user_id`
+        FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='user permission punishments';

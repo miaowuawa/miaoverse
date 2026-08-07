@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -48,6 +49,10 @@ func RequireUser(servants *server.Servants, checks ...UserCheck.Check) fiber.Han
 			if result.Err != nil {
 				return rejectUserGuard(ctx, fiber.StatusInternalServerError, i18n.ErrServerContactAdmin)
 			}
+			// 账号封禁（不允许登录）返回自定义业务错误码 40303，其余账号状态问题返回通用 403
+			if result.Failure == UserCheck.AccountBanned {
+				return resp.AccountBanned(ctx)
+			}
 			return rejectUserGuard(ctx, fiber.StatusForbidden, failureMessage(result.Failure))
 		}
 
@@ -68,6 +73,26 @@ func CurrentUser(ctx fiber.Ctx) (*modeluser.User, bool) {
 		return nil, false
 	}
 	return userCtx.User, true
+}
+
+// RequireNotPunished 校验当前登录用户没有被封禁指定权限位（perm 为 bitmask）。
+// 被封禁时返回 403，body code 为 40302。
+func RequireNotPunished(servants *server.Servants, perm uint32) fiber.Handler {
+	return func(ctx fiber.Ctx) error {
+		uid, ok := CurrentUID(ctx)
+		if !ok {
+			return rejectUserGuard(ctx, fiber.StatusUnauthorized, i18n.ErrUnauthorized)
+		}
+
+		punished, err := servants.UserServant.HasActivePunishment(uid, perm, time.Now())
+		if err != nil {
+			return rejectUserGuard(ctx, fiber.StatusInternalServerError, i18n.ErrServerContactAdmin)
+		}
+		if punished {
+			return resp.Punished(ctx)
+		}
+		return ctx.Next()
+	}
 }
 
 func failureMessage(failure UserCheck.Failure) i18n.MessageKey {

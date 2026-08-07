@@ -18,6 +18,14 @@ const (
 	FileTypeOther    uint8 = 5
 )
 
+// FilePermission 文件分享权限（与动态可见权限一致）
+const (
+	FilePermissionPublic  uint8 = 0 // 给全部人公开
+	FilePermissionFriends uint8 = 1 // 给好友公开
+	FilePermissionFans    uint8 = 3 // 给粉丝公开
+	FilePermissionNone    uint8 = 2 // 不给任何人公开
+)
+
 type File struct {
 	ID           uint64    `gorm:"primaryKey" json:"id"`
 	UUID         string    `gorm:"column:uuid;not null;uniqueIndex" json:"uuid"`
@@ -29,6 +37,7 @@ type File struct {
 	FileExt      string    `gorm:"column:file_ext;not null;default:''" json:"file_ext"`
 	MimeType     string    `gorm:"column:mime_type;not null;default:''" json:"mime_type"`
 	FileSize     uint64    `gorm:"column:file_size;not null;default:0" json:"file_size"`
+	Permission   uint8     `gorm:"column:permission;not null;default:2" json:"permission"`
 	Width        *uint32   `gorm:"column:width" json:"width,omitempty"`
 	Height       *uint32   `gorm:"column:height" json:"height,omitempty"`
 	Duration     *uint32   `gorm:"column:duration" json:"duration,omitempty"`

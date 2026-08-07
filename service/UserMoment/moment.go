@@ -11,6 +11,9 @@ import (
 const (
 	maxMomentContentLen = 5000
 	maxMomentTitleLen   = 255
+
+	// ContentTypeMoment 内容类型标识
+	ContentTypeMoment = "moment"
 )
 
 // NormalizePublish 校验并归一化发布动态请求，返回可入库的动态记录
@@ -75,4 +78,17 @@ func ToMomentInfo(m *modelmoment.Moment) resp.MomentInfo {
 		CreatedAt:         m.CreatedAt,
 		UpdatedAt:         m.UpdatedAt,
 	}
+}
+
+// ToContentItem 将动态转换为内容列表项
+func ToContentItem(m *modelmoment.Moment, metas map[uint64]modelmoment.MomentMetaData) resp.ContentItem {
+	item := resp.ContentItem{
+		ID:   m.ID,
+		Type: ContentTypeMoment,
+	}
+	if meta, ok := metas[m.ID]; ok {
+		item.Comment = meta.CommentCount
+		item.Like = meta.LikeCount
+	}
+	return item
 }

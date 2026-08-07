@@ -3,11 +3,15 @@ package api
 import (
 	"miaoverse/api/routers/v1/sms"
 	userblock "miaoverse/api/routers/v1/user/block"
+	usercomment "miaoverse/api/routers/v1/user/comment"
+	usercontent "miaoverse/api/routers/v1/user/content"
 	userfile "miaoverse/api/routers/v1/user/file"
 	"miaoverse/api/routers/v1/user/login"
 	usermoment "miaoverse/api/routers/v1/user/moment"
 	"miaoverse/api/routers/v1/user/profile"
+	userpunishment "miaoverse/api/routers/v1/user/punishment"
 	"miaoverse/middleware"
+	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/service/UserCheck"
 	"time"
@@ -64,10 +68,25 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	userGroup.Get("/files/:uuid/shared-link", func(c fiber.Ctx) error {
 		return userfile.SharedTempLinkHandler(c, servants)
 	})
-	userGroup.Post("/moments", func(c fiber.Ctx) error {
+	userGroup.Post("/moments", middleware.RequireNotPunished(servants, modeluser.PermPost), func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
+	})
+	userGroup.Post("/comments", middleware.RequireNotPunished(servants, modeluser.PermComment), func(c fiber.Ctx) error {
+		return usercomment.CreateHandler(c, servants)
+	})
+	userGroup.Get("/punishments", func(c fiber.Ctx) error {
+		return userpunishment.ListMineHandler(c, servants)
 	})
 	userGroup.Post("/blocks", func(c fiber.Ctx) error {
 		return userblock.UpdateHandler(c, servants)
+	})
+	userGroup.Get("/users/:uid/contents/count", func(c fiber.Ctx) error {
+		return usercontent.CountHandler(c, servants)
+	})
+	userGroup.Get("/users/:uid/contents", func(c fiber.Ctx) error {
+		return usercontent.ListHandler(c, servants)
+	})
+	userGroup.Get("/users/:uid/info", func(c fiber.Ctx) error {
+		return profile.GetUserInfoHandler(c, servants)
 	})
 }

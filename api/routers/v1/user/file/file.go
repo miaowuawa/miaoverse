@@ -42,6 +42,13 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	req := uploadreq.UploadFile{
 		FileType: strings.TrimSpace(ctx.FormValue("file_type")),
 	}
+	permission := req.Permission
+	if permission != modeluser.FilePermissionPublic &&
+		permission != modeluser.FilePermissionFriends &&
+		permission != modeluser.FilePermissionFans &&
+		permission != modeluser.FilePermissionNone {
+		return resp.BadRequest(ctx)
+	}
 	fileName := UserFile.SanitizeFileName(fileHeader.Filename)
 	if fileName == "" {
 		return resp.BadRequest(ctx)
@@ -65,15 +72,16 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 	recordInput := modeluser.File{
-		UUID:     fileUUID,
-		UserID:   uid,
-		FileName: fileName,
-		FileType: fileType,
-		FileExt:  fileExt,
-		MimeType: mimeType,
-		FileSize: uint64(fileHeader.Size),
-		Hash:     fileHash,
-		Status:   modeluser.FileStatusActive,
+		UUID:       fileUUID,
+		UserID:     uid,
+		FileName:   fileName,
+		FileType:   fileType,
+		FileExt:    fileExt,
+		MimeType:   mimeType,
+		FileSize:   uint64(fileHeader.Size),
+		Permission: permission,
+		Hash:       fileHash,
+		Status:     modeluser.FileStatusActive,
 	}
 
 	if reusedFile != nil && reusedFile.ID != 0 {
@@ -164,6 +172,16 @@ func SharedTempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return resp.FileNotFound(ctx)
+		}
+		return resp.ServerError(ctx)
+	}
+
+	if err := UserFile.CheckSharedAccess(ctx.Context(), servants.BlockServant, servants.InteractsServant, uid, record.UserID, record.Permission); err != nil {
+		if errors.Is(err, UserFile.ErrFileBlockedByOwner) {
+			return resp.FileBlockedByOwner(ctx)
+		}
+		if errors.Is(err, UserFile.ErrFileNotShared) {
+			return resp.FileNotShared(ctx)
 		}
 		return resp.ServerError(ctx)
 	}
