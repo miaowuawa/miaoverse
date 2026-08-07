@@ -63,7 +63,7 @@ func UpdatePartialHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	return updateProfile(ctx, servants, uid, updates)
 }
 
-func updateProfile(ctx fiber.Ctx, servants *server.Servants, uid uint64, updates map[string]any) error {
+func updateProfile(ctx fiber.Ctx, servants *server.Servants, uid uint32, updates map[string]any) error {
 	user, err := servants.UserServant.UpdateProfile(uid, updates)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -153,7 +153,7 @@ func validNickname(value string) bool {
 	return value != "" && len(value) <= maxNicknameLen
 }
 
-func validRegion(value int) bool {
+func validRegion(value uint16) bool {
 	return value > 0
 }
 

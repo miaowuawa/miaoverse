@@ -55,8 +55,8 @@ func RequireUser(servants *server.Servants, checks ...UserCheck.Check) fiber.Han
 	}
 }
 
-func CurrentUID(ctx fiber.Ctx) (uint64, bool) {
-	if uid, ok := ctx.Locals(uidLocalKey).(uint64); ok {
+func CurrentUID(ctx fiber.Ctx) (uint32, bool) {
+	if uid, ok := ctx.Locals(uidLocalKey).(uint32); ok {
 		return uid, true
 	}
 	return UserSession.CurrentUID(ctx)

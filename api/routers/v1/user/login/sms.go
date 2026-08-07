@@ -142,11 +142,11 @@ func verifySMSCode(req *loginreq.SMS, servants *server.Servants) (bool, error) {
 	if !valid {
 		return false, nil
 	}
-	hash := util.MD5Hash.HashStr(strconv.Itoa(req.Region) + req.Phone)
+	hash := util.MD5Hash.HashStr(strconv.FormatUint(uint64(req.Region), 10) + req.Phone)
 	return servants.CodeManager.VerifyCodeByRegionPhoneMD5(hash, req.UUID, strconv.Itoa(req.Code))
 }
 
-func loginSingleAccount(ctx fiber.Ctx, phone string, region int, uid uint64, status int, msgKey i18n.MessageKey) error {
+func loginSingleAccount(ctx fiber.Ctx, phone string, region uint16, uid uint32, status int, msgKey i18n.MessageKey) error {
 	if err := UserSession.LoginBySMSSingleAccount(ctx, phone, region, uid); err != nil {
 		return resp.ServerError(ctx)
 	}

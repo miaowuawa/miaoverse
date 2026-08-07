@@ -57,3 +57,11 @@ func FileTempLink(ctx fiber.Ctx, fileUUID string, url string, expiresAt time.Tim
 		},
 	})
 }
+
+func MomentPublished(ctx fiber.Ctx, moment MomentInfo) error {
+	return ctx.Status(fiber.StatusCreated).JSON(CodeWithMsgMoment{
+		Code:   fiber.StatusCreated,
+		Msg:    i18n.Message(ctx, i18n.OKMomentPublished),
+		Moment: moment,
+	})
+}

@@ -3,7 +3,7 @@ package updatereq
 type ProfileFull struct {
 	Username string `json:"username"`
 	Nickname string `json:"nickname"`
-	Region   int    `json:"region"`
+	Region   uint16 `json:"region"`
 	Avatar   string `json:"avatar"`
 	Gender   uint8  `json:"gender"`
 }
@@ -11,7 +11,7 @@ type ProfileFull struct {
 type ProfilePatch struct {
 	Username *string `json:"username"`
 	Nickname *string `json:"nickname"`
-	Region   *int    `json:"region"`
+	Region   *uint16 `json:"region"`
 	Avatar   *string `json:"avatar"`
 	Gender   *uint8  `json:"gender"`
 }

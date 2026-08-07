@@ -68,7 +68,7 @@ curl -i http://localhost:3000/
 响应体为纯文本：
 
 ```text
-Miaoverse Content/User API Resp at 2026-06-01 12:00:00
+Miaoverse API Resp at 2026-06-01 12:00:00
 ```
 
 ## 发送短信验证码
@@ -217,21 +217,21 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/sms \
   "msg": "请选择要登录的账号",
   "users": [
     {
-      "ID": 10001,
-      "Username": "user_xxx",
-      "Nickname": "nickname_xxx",
-      "Region": 86,
-      "Avatar": "",
-      "Gender": 0,
-      "Status": 1,
-      "CreatedAt": "2026-06-01T12:00:00+08:00",
-      "UpdatedAt": "2026-06-01T12:00:00+08:00"
+      "id": 10001,
+      "username": "user_xxx",
+      "nickname": "nickname_xxx",
+      "region": 86,
+      "avatar": "",
+      "gender": 0,
+      "status": 1,
+      "created_at": "2026-06-01T12:00:00+08:00",
+      "updated_at": "2026-06-01T12:00:00+08:00"
     }
   ]
 }
 ```
 
-注意：`users` 中的字段来自 Go 结构体 `model/dao/user.User`，当前没有 JSON tag，因此默认 JSON 字段名为大写结构体字段名。
+注意：`users` 中的字段来自 Go 结构体 `model/dao/user.User`，JSON 字段名为小写下划线格式（`id`、`username`、`nickname`、`region`、`avatar`、`gender`、`status`、`created_at`、`updated_at`）。
 
 #### Session 行为
 
@@ -411,15 +411,15 @@ curl -i -X POST http://localhost:3000/api/v1/user/register/sms \
   "code": 200,
   "msg": "用户信息修改成功",
   "user": {
-    "ID": 10001,
-    "Username": "miaoverse_user",
-    "Nickname": "Miaowu",
-    "Region": 86,
-    "Avatar": "https://example.com/avatar.png",
-    "Gender": 0,
-    "Status": 1,
-    "CreatedAt": "2026-06-01T12:00:00+08:00",
-    "UpdatedAt": "2026-06-01T12:00:00+08:00"
+    "id": 10001,
+    "username": "miaoverse_user",
+    "nickname": "Miaowu",
+    "region": 86,
+    "avatar": "https://example.com/avatar.png",
+    "gender": 0,
+    "status": 1,
+    "created_at": "2026-06-01T12:00:00+08:00",
+    "updated_at": "2026-06-01T12:00:00+08:00"
   }
 }
 ```
@@ -546,6 +546,118 @@ curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d
 | `404` | 文件不存在、已删除或不属于当前用户 |
 | `503` | S3 未启用或文件存储服务不可用 |
 | `500` | S3 临时链接生成或数据库查询异常 |
+
+### `GET /api/v1/user/files/:uuid/shared-link`
+
+通过文件 UUID 获取任意用户 active 文件的 S3 临时访问链接，用于帖子等场景查看/下载其他用户的文件或媒体。临时链接绑定当前登录用户身份，且只对 active 状态的文件生效。
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d8c5d/shared-link \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "link": {
+    "uuid": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d",
+    "url": "https://s3.example.com/...",
+    "expires_at": "2026-06-07T12:05:00Z"
+  }
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | UUID 参数为空或格式非法 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `404` | 文件不存在或已删除（非 active 状态） |
+| `503` | S3 未启用或文件存储服务不可用 |
+| `500` | S3 临时链接生成或数据库查询异常 |
+
+## 发布动态
+
+### `POST /api/v1/user/moments`
+
+发布当前登录用户的动态。支持设置发布状态（正常/草稿）、可见权限（公开/仅好友/仅自己/仅粉丝）、评论权限（全部可评论/仅好友可评论/仅粉丝可评论/全部不可评论）以及个人置顶。全站置顶（`top=100`）不允许普通用户设置，服务端会直接拒绝。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "content": "今天天气真好",
+  "status": 0,
+  "permission": 0,
+  "comment_permission": 0,
+  "top": 0
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+| --- | --- | --- | --- | --- |
+| `content` | string | 是 | 非空，最长 5000 字符 | 动态正文 |
+| `status` | number | 否 | `0` 正常，`2` 草稿 | 发布状态，默认 `0` |
+| `permission` | number | 否 | `0` 公开，`1` 仅好友，`2` 仅自己，`3` 仅粉丝 | 可见权限，默认 `0` |
+| `comment_permission` | number | 否 | `0` 全部可评论，`1` 仅好友（互相关注），`2` 仅粉丝，`3` 全部不可评论 | 评论权限，默认 `0` |
+| `top` | number | 否 | `0` 不置顶，`1` 个人置顶 | 置顶状态，默认 `0`；`100` 全站置顶不允许设置 |
+
+#### 请求示例
+
+```bash
+curl -i -X POST http://localhost:3000/api/v1/user/moments \
+  -H "Content-Type: application/json" \
+  -b cookie.txt \
+  -d '{"content":"今天天气真好","status":0,"permission":0,"comment_permission":0,"top":0}'
+```
+
+#### 成功响应
+
+状态码：`201 Created`
+
+```json
+{
+  "code": 201,
+  "msg": "发布成功",
+  "moment": {
+    "id": 1,
+    "user_id": 10001,
+    "title": "",
+    "content": "今天天气真好",
+    "status": 0,
+    "permission": 0,
+    "comment_permission": 0,
+    "top": 0,
+    "created_at": "2026-06-07T12:00:00+08:00",
+    "updated_at": "2026-06-07T12:00:00+08:00"
+  }
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、`content` 为空或超长、`status`/`permission`/`comment_permission`/`top` 取值非法（含设置全站置顶） |
+| `401` | 未登录或 session 中没有 `UID` |
+| `500` | 数据库写入异常 |
 
 ## 推荐调用流程
 

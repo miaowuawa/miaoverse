@@ -4,6 +4,7 @@ import (
 	"miaoverse/api/routers/v1/sms"
 	userfile "miaoverse/api/routers/v1/user/file"
 	"miaoverse/api/routers/v1/user/login"
+	usermoment "miaoverse/api/routers/v1/user/moment"
 	"miaoverse/api/routers/v1/user/profile"
 	"miaoverse/middleware"
 	"miaoverse/model/server"
@@ -58,5 +59,11 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	})
 	userGroup.Get("/files/:uuid/temp-link", func(c fiber.Ctx) error {
 		return userfile.TempLinkHandler(c, servants)
+	})
+	userGroup.Get("/files/:uuid/shared-link", func(c fiber.Ctx) error {
+		return userfile.SharedTempLinkHandler(c, servants)
+	})
+	userGroup.Post("/moments", func(c fiber.Ctx) error {
+		return usermoment.PublishHandler(c, servants)
 	})
 }

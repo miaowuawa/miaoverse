@@ -27,7 +27,7 @@ const (
 )
 
 type Context struct {
-	UID         uint64
+	UID         uint32
 	User        *modeluser.User
 	servants    *server.Servants
 	credentials map[uint8]bool
@@ -40,7 +40,7 @@ type Result struct {
 
 type Check func(*Context) Result
 
-func NewContext(uid uint64, user *modeluser.User, servants *server.Servants) *Context {
+func NewContext(uid uint32, user *modeluser.User, servants *server.Servants) *Context {
 	return &Context{
 		UID:         uid,
 		User:        user,

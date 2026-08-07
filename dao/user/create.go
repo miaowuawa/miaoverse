@@ -4,7 +4,7 @@ import (
 	"miaoverse/model/dao/user"
 )
 
-func (d *UserDAO) Create(newUser user.User, credentials []user.UserCredential) (uint64, error) {
+func (d *UserDAO) Create(newUser user.User, credentials []user.UserCredential) (uint32, error) {
 	tx := d.DB.Begin()
 	if tx.Error != nil {
 		return 0, tx.Error

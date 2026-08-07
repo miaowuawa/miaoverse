@@ -28,7 +28,7 @@ func (buildStringNamespace) GenerateUsername() (string, error) {
 
 type fileTypeNamespace struct{}
 
-func (fileTypeNamespace) Normalize(value string, mimeType string) string {
+func (fileTypeNamespace) Normalize(value string, mimeType string) uint8 {
 	return filetypeutil.Normalize(value, mimeType)
 }
 

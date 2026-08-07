@@ -13,7 +13,7 @@ const (
 	SessionPendingLoginRegion = "PendingLoginRegion"
 )
 
-func LoginBySMSSingleAccount(c fiber.Ctx, phone string, region int, id uint64) error {
+func LoginBySMSSingleAccount(c fiber.Ctx, phone string, region uint16, id uint32) error {
 	if err := loginUniversal(c); err != nil {
 		return err
 	}
@@ -27,7 +27,7 @@ func LoginBySMSSingleAccount(c fiber.Ctx, phone string, region int, id uint64) e
 	return nil
 }
 
-func LoginBySMSMultipleChoices(c fiber.Ctx, phone string, region int) error {
+func LoginBySMSMultipleChoices(c fiber.Ctx, phone string, region uint16) error {
 	if err := loginUniversal(c); err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func LoginBySMSMultipleChoices(c fiber.Ctx, phone string, region int) error {
 	return nil
 }
 
-func PendingSMSLogin(c fiber.Ctx) (string, int, bool) {
+func PendingSMSLogin(c fiber.Ctx) (string, uint16, bool) {
 	sess := session.FromContext(c)
 	if sess == nil {
 		return "", 0, false
@@ -50,7 +50,7 @@ func PendingSMSLogin(c fiber.Ctx) (string, int, bool) {
 		return "", 0, false
 	}
 
-	region, ok := sessionValueToInt(sess.Get(SessionPendingLoginRegion))
+	region, ok := sessionValueToUint16(sess.Get(SessionPendingLoginRegion))
 	if !ok {
 		return "", 0, false
 	}
@@ -58,78 +58,102 @@ func PendingSMSLogin(c fiber.Ctx) (string, int, bool) {
 	return phone, region, true
 }
 
-func CurrentUID(c fiber.Ctx) (uint64, bool) {
+func CurrentUID(c fiber.Ctx) (uint32, bool) {
 	sess := session.FromContext(c)
 	if sess == nil {
 		return 0, false
 	}
-	return sessionValueToUint64(sess.Get(SessionUID))
+	return sessionValueToUint32(sess.Get(SessionUID))
 }
 
-func sessionValueToInt(value any) (int, bool) {
+func sessionValueToUint16(value any) (uint16, bool) {
 	switch v := value.(type) {
 	case int:
-		return v, true
+		if v < 0 || v > 65535 {
+			return 0, false
+		}
+		return uint16(v), true
 	case int8:
-		return int(v), true
+		if v < 0 {
+			return 0, false
+		}
+		return uint16(v), true
 	case int16:
-		return int(v), true
+		if v < 0 {
+			return 0, false
+		}
+		return uint16(v), true
 	case int32:
-		return int(v), true
+		if v < 0 || v > 65535 {
+			return 0, false
+		}
+		return uint16(v), true
 	case int64:
-		return int(v), true
+		if v < 0 || v > 65535 {
+			return 0, false
+		}
+		return uint16(v), true
 	case uint:
-		return int(v), true
+		if v > 65535 {
+			return 0, false
+		}
+		return uint16(v), true
 	case uint8:
-		return int(v), true
+		return uint16(v), true
 	case uint16:
-		return int(v), true
+		return v, true
 	case uint32:
-		return int(v), true
+		if v > 65535 {
+			return 0, false
+		}
+		return uint16(v), true
 	case uint64:
-		return int(v), true
+		if v > 65535 {
+			return 0, false
+		}
+		return uint16(v), true
 	default:
 		return 0, false
 	}
 }
 
-func sessionValueToUint64(value any) (uint64, bool) {
+func sessionValueToUint32(value any) (uint32, bool) {
 	switch v := value.(type) {
 	case int:
 		if v < 0 {
 			return 0, false
 		}
-		return uint64(v), true
+		return uint32(v), true
 	case int8:
 		if v < 0 {
 			return 0, false
 		}
-		return uint64(v), true
+		return uint32(v), true
 	case int16:
 		if v < 0 {
 			return 0, false
 		}
-		return uint64(v), true
+		return uint32(v), true
 	case int32:
 		if v < 0 {
 			return 0, false
 		}
-		return uint64(v), true
+		return uint32(v), true
 	case int64:
 		if v < 0 {
 			return 0, false
 		}
-		return uint64(v), true
+		return uint32(v), true
 	case uint:
-		return uint64(v), true
+		return uint32(v), true
 	case uint8:
-		return uint64(v), true
+		return uint32(v), true
 	case uint16:
-		return uint64(v), true
+		return uint32(v), true
 	case uint32:
-		return uint64(v), true
-	case uint64:
 		return v, true
+	case uint64:
+		return uint32(v), true
 	default:
 		return 0, false
 	}

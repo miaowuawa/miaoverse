@@ -7,7 +7,7 @@ import (
 	"miaoverse/util"
 )
 
-func CheckAndCreateIfNotExists(phone string, region int, servants *server.Servants) ([]user.User, bool, error) {
+func CheckAndCreateIfNotExists(phone string, region uint16, servants *server.Servants) ([]user.User, bool, error) {
 	users, err := servants.UserServant.QueryByPhone(phone, region)
 	if err != nil {
 		return nil, false, err
@@ -23,7 +23,7 @@ func CheckAndCreateIfNotExists(phone string, region int, servants *server.Servan
 	return []user.User{newUser}, false, nil
 }
 
-func CreateAccountForPhone(phone string, region int, servants *server.Servants) (user.User, error) {
+func CreateAccountForPhone(phone string, region uint16, servants *server.Servants) (user.User, error) {
 	username, err := util.BuildString.GenerateUsername()
 	if err != nil {
 		return user.User{}, err
@@ -48,7 +48,7 @@ func CreateAccountForPhone(phone string, region int, servants *server.Servants) 
 	return newUser, nil
 }
 
-func UserBelongsToPhone(userID uint64, phone string, region int, servants *server.Servants) (bool, error) {
+func UserBelongsToPhone(userID uint32, phone string, region uint16, servants *server.Servants) (bool, error) {
 	users, err := servants.UserServant.QueryByPhone(phone, region)
 	if err != nil {
 		return false, err

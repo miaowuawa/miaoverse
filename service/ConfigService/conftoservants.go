@@ -9,6 +9,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"miaoverse/dao/content"
 	"miaoverse/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
@@ -86,6 +87,10 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 
 	userdao := &user.UserDAO{}
 	userdao.DB = db
+
+	//init content DAO
+	contentdao := &content.ContentDAO{}
+	contentdao.DB = db
 	//step3 validator
 	validator := validator2.New()
 	err = util.Validate.InitialValidator(validator)
@@ -119,6 +124,7 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		SmsServant:          smsServant,
 		CodeManager:         codeManager,
 		UserServant:         userdao,
+		ContentServant:      contentdao,
 		Validator:           validator,
 		S3Servant:           s3Servant,
 		MaxUploadFileSize:   conf.UploadMaxFileSizeBytes(),

@@ -50,6 +50,7 @@ const (
 	OKUserInfoUpdated      MessageKey = "ok.user_info_updated"
 	OKFileUploaded         MessageKey = "ok.file_uploaded"
 	OKFileTempLink         MessageKey = "ok.file_temp_link"
+	OKMomentPublished      MessageKey = "ok.moment_published"
 	SMSActionLoginRegister MessageKey = "sms.action.login_register"
 )
 
@@ -390,6 +391,7 @@ func resetCatalog() {
 			OKNewAccountAndLogin:   {Other: "新账号注册并登录成功"},
 			OKChooseLoginAccount:   {Other: "请选择要登录的账号"},
 			OKUserInfoUpdated:      {Other: "用户信息修改成功"},
+			OKMomentPublished:      {Other: "发布成功"},
 			SMSActionLoginRegister: {Other: "登录或注册"},
 		},
 	}

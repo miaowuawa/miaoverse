@@ -6,7 +6,7 @@ import (
 	"miaoverse/util"
 )
 
-func PasswordToCredentialStructure(UserID uint64, password string) (error, []*user.UserCredential) {
+func PasswordToCredentialStructure(UserID uint32, password string) (error, []*user.UserCredential) {
 	// 1. 对密码进行bcrypt加密
 	bcryptHash, err := util.Security.HashPassword(password)
 	if err != nil {

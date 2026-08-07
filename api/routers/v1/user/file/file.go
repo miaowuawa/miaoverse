@@ -2,9 +2,7 @@ package file
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"path/filepath"
@@ -66,7 +64,6 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return resp.ServerError(ctx)
 	}
-
 	recordInput := modeluser.File{
 		UUID:     fileUUID,
 		UserID:   uid,
@@ -137,12 +134,7 @@ func TempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	uidValue := fmt.Sprintf("%d", uid)
-	signature, err := servants.S3Servant.CreateTempSignature(uidValue)
-	if err != nil {
-		return resp.ServerError(ctx)
-	}
-	link, err := servants.S3Servant.GetTempObjectLink(ctx.Context(), uidValue, signature.Signature, record.ObjectKey)
+	link, err := UserFile.BuildSharedTempLink(ctx.Context(), servants.S3Servant, uid, record)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
@@ -150,16 +142,52 @@ func TempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	return resp.FileTempLink(ctx, record.UUID, link.URL, link.ExpiresAt)
 }
 
-func hashUploadedFile(fileHeader *multipart.FileHeader) (string, error) {
+// SharedTempLinkHandler 获取任意用户 active 文件的临时访问链接，用于帖子等查看/下载他人文件/媒体
+func SharedTempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
+	uid, ok := middleware.CurrentUID(ctx)
+	if !ok {
+		return resp.Unauthorized(ctx)
+	}
+	if servants.S3Servant == nil {
+		return resp.StorageUnavailable(ctx)
+	}
+
+	fileUUID := strings.TrimSpace(ctx.Params("uuid"))
+	if fileUUID == "" {
+		return resp.BadRequest(ctx)
+	}
+	if _, err := uuid.Parse(fileUUID); err != nil {
+		return resp.BadRequest(ctx)
+	}
+
+	record, err := servants.UserServant.QueryActiveFileByUUIDAnyUser(fileUUID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return resp.FileNotFound(ctx)
+		}
+		return resp.ServerError(ctx)
+	}
+
+	link, err := UserFile.BuildSharedTempLink(ctx.Context(), servants.S3Servant, uid, record)
+	if err != nil {
+		return resp.ServerError(ctx)
+	}
+
+	return resp.FileTempLink(ctx, record.UUID, link.URL, link.ExpiresAt)
+}
+
+func hashUploadedFile(fileHeader *multipart.FileHeader) ([32]byte, error) {
+	var fileHash [32]byte
 	src, err := fileHeader.Open()
 	if err != nil {
-		return "", err
+		return fileHash, err
 	}
 	defer src.Close()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, src); err != nil {
-		return "", err
+		return fileHash, err
 	}
-	return hex.EncodeToString(hasher.Sum(nil)), nil
+	copy(fileHash[:], hasher.Sum(nil))
+	return fileHash, nil
 }

@@ -3,5 +3,5 @@ package resp
 type CodeWithMsgUserID struct {
 	Code int    `json:"code"`
 	Msg  string `json:"msg"`
-	UID  uint64 `json:"uid"`
+	UID  uint32 `json:"uid"`
 }
