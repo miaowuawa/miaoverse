@@ -62,6 +62,7 @@ const (
 	OKCommentCreated       MessageKey = "ok.comment_created"
 	OKPunishmentsFetched   MessageKey = "ok.punishments_fetched"
 	OKRelationList         MessageKey = "ok.relation_list"
+	OKInteract             MessageKey = "ok.interact"
 	SMSActionLoginRegister MessageKey = "sms.action.login_register"
 )
 
@@ -414,6 +415,7 @@ func resetCatalog() {
 			OKCommentCreated:       {Other: "评论成功"},
 			OKPunishmentsFetched:   {Other: "获取成功"},
 			OKRelationList:         {Other: "获取成功"},
+			OKInteract:             {Other: "操作成功"},
 			SMSActionLoginRegister: {Other: "登录或注册"},
 		},
 	}

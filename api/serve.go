@@ -6,6 +6,7 @@ import (
 	usercomment "miaoverse/api/routers/v1/user/comment"
 	usercontent "miaoverse/api/routers/v1/user/content"
 	userfile "miaoverse/api/routers/v1/user/file"
+	userinteract "miaoverse/api/routers/v1/user/interact"
 	"miaoverse/api/routers/v1/user/login"
 	usermoment "miaoverse/api/routers/v1/user/moment"
 	"miaoverse/api/routers/v1/user/profile"
@@ -72,28 +73,44 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	userGroup.Post("/moments", middleware.RequireNotPunished(servants, modeluser.PermPost), func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
 	})
-	userGroup.Post("/comments", middleware.RequireNotPunished(servants, modeluser.PermComment), func(c fiber.Ctx) error {
-		return usercomment.CreateHandler(c, servants)
-	})
+	userGroup.Post("/comments", middleware.RequireNotPunished(servants, modeluser.PermComment),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),
+		func(c fiber.Ctx) error {
+			return usercomment.CreateHandler(c, servants)
+		})
+	userGroup.Post("/follows", middleware.RequireNotPunished(servants, modeluser.PermSocial),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{BodyField: "target", CheckMuteUnwatch: true}),
+		func(c fiber.Ctx) error {
+			return userinteract.FollowHandler(c, servants)
+		})
+	userGroup.Post("/likes", middleware.RequireNotPunished(servants, modeluser.PermSocial),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),
+		func(c fiber.Ctx) error {
+			return userinteract.LikeHandler(c, servants)
+		})
 	userGroup.Get("/punishments", func(c fiber.Ctx) error {
 		return userpunishment.ListMineHandler(c, servants)
 	})
 	userGroup.Post("/blocks", func(c fiber.Ctx) error {
 		return userblock.UpdateHandler(c, servants)
 	})
-	userGroup.Get("/users/:uid/contents/count", func(c fiber.Ctx) error {
-		return usercontent.CountHandler(c, servants)
-	})
-	userGroup.Get("/users/:uid/contents", func(c fiber.Ctx) error {
-		return usercontent.ListHandler(c, servants)
-	})
+	userGroup.Get("/users/:uid/contents/count", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+		func(c fiber.Ctx) error {
+			return usercontent.CountHandler(c, servants)
+		})
+	userGroup.Get("/users/:uid/contents", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+		func(c fiber.Ctx) error {
+			return usercontent.ListHandler(c, servants)
+		})
 	userGroup.Get("/users/:uid/info", func(c fiber.Ctx) error {
 		return profile.GetUserInfoHandler(c, servants)
 	})
-	userGroup.Get("/users/:uid/following", func(c fiber.Ctx) error {
-		return userrelation.FollowingHandler(c, servants)
-	})
-	userGroup.Get("/users/:uid/followers", func(c fiber.Ctx) error {
-		return userrelation.FollowersHandler(c, servants)
-	})
+	userGroup.Get("/users/:uid/following", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+		func(c fiber.Ctx) error {
+			return userrelation.FollowingHandler(c, servants)
+		})
+	userGroup.Get("/users/:uid/followers", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+		func(c fiber.Ctx) error {
+			return userrelation.FollowersHandler(c, servants)
+		})
 }

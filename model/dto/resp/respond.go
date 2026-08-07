@@ -161,3 +161,12 @@ func RelationList(ctx fiber.Ctx, count int64, users []RelationUser) error {
 		Users: users,
 	})
 }
+
+func InteractOK(ctx fiber.Ctx, target uint64, action string) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgInteract{
+		Code:   fiber.StatusOK,
+		Msg:    i18n.Message(ctx, i18n.OKInteract),
+		Target: target,
+		Action: action,
+	})
+}

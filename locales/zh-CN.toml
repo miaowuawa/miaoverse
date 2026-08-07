@@ -43,6 +43,7 @@ language = "zh-CN"
 "ok.comment_created" = "评论成功"
 "ok.punishments_fetched" = "获取成功"
 "ok.relation_list" = "获取成功"
+"ok.interact" = "操作成功"
 "sms.action.login_register" = "登录或注册"
 
 [plurals."example.items"]

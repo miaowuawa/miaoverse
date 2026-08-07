@@ -25,17 +25,9 @@ func CountHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.Unauthorized(ctx)
 	}
 
-	targetID, ok := parseTargetID(ctx)
+	targetID, ok := middleware.BlockTarget(ctx)
 	if !ok {
 		return resp.BadRequest(ctx)
-	}
-
-	blocked, err := servants.BlockServant.IsBlockedEither(ctx.Context(), uid, targetID)
-	if err != nil {
-		return resp.ServerError(ctx)
-	}
-	if blocked {
-		return resp.Blocked(ctx)
 	}
 
 	isFriend, isFan, err := relationFlags(ctx, servants, uid, targetID)
@@ -57,7 +49,7 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.Unauthorized(ctx)
 	}
 
-	targetID, ok := parseTargetID(ctx)
+	targetID, ok := middleware.BlockTarget(ctx)
 	if !ok {
 		return resp.BadRequest(ctx)
 	}
@@ -65,14 +57,6 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	offset, limit, ok := parsePagination(ctx)
 	if !ok {
 		return resp.BadRequest(ctx)
-	}
-
-	blocked, err := servants.BlockServant.IsBlockedEither(ctx.Context(), uid, targetID)
-	if err != nil {
-		return resp.ServerError(ctx)
-	}
-	if blocked {
-		return resp.Blocked(ctx)
 	}
 
 	isFriend, isFan, err := relationFlags(ctx, servants, uid, targetID)
@@ -96,18 +80,6 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	return resp.ContentList(ctx, items)
-}
-
-func parseTargetID(ctx fiber.Ctx) (uint32, bool) {
-	value := strings.TrimSpace(ctx.Params("uid"))
-	if value == "" {
-		return 0, false
-	}
-	id, err := strconv.ParseUint(value, 10, 32)
-	if err != nil || id == 0 {
-		return 0, false
-	}
-	return uint32(id), true
 }
 
 func parsePagination(ctx fiber.Ctx) (int, int, bool) {
