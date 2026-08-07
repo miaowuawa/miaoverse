@@ -48,3 +48,14 @@ func (d *InteractsDAO) CreateCommentAndMeta(comment modelinteracts.Comment, mome
 	}
 	return &comment, nil
 }
+
+// CountMomentCommentsReal 统计动态实际评论数（target_type=moment, status=normal）。
+// 楼中楼回复（target_type=comment）不计入动态评论数。
+func (d *InteractsDAO) CountMomentCommentsReal(momentID uint64) (int64, error) {
+	var count int64
+	err := d.DB.Model(&modelinteracts.Comment{}).
+		Where("target_id = ? AND target_type = ? AND status = ?",
+			momentID, modelinteracts.CommentTargetMoment, modelinteracts.CommentStatusNormal).
+		Count(&count).Error
+	return count, err
+}

@@ -61,6 +61,7 @@ const (
 	OKUserInfoFetched      MessageKey = "ok.user_info_fetched"
 	OKCommentCreated       MessageKey = "ok.comment_created"
 	OKPunishmentsFetched   MessageKey = "ok.punishments_fetched"
+	OKRelationList         MessageKey = "ok.relation_list"
 	SMSActionLoginRegister MessageKey = "sms.action.login_register"
 )
 
@@ -412,6 +413,7 @@ func resetCatalog() {
 			OKUserInfoFetched:      {Other: "获取成功"},
 			OKCommentCreated:       {Other: "评论成功"},
 			OKPunishmentsFetched:   {Other: "获取成功"},
+			OKRelationList:         {Other: "获取成功"},
 			SMSActionLoginRegister: {Other: "登录或注册"},
 		},
 	}

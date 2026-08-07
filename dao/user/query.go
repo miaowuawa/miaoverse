@@ -25,6 +25,23 @@ func (d *UserDAO) QueryByID(userID uint32) (*user.User, error) {
 	return &u, err
 }
 
+// QueryUsersByIDs 批量按 ID 查询用户
+func (d *UserDAO) QueryUsersByIDs(ids []uint32) (map[uint32]user.User, error) {
+	result := map[uint32]user.User{}
+	if len(ids) == 0 {
+		return result, nil
+	}
+
+	var list []user.User
+	if err := d.DB.Where("id IN ?", ids).Find(&list).Error; err != nil {
+		return nil, err
+	}
+	for _, u := range list {
+		result[u.ID] = u
+	}
+	return result, nil
+}
+
 func (d *UserDAO) QueryCredential(userID uint32, credType uint8) (*user.UserCredential, error) {
 	var cred user.UserCredential
 	err := d.DB.Where("user_id = ? AND credential_type = ?", userID, credType).First(&cred).Error

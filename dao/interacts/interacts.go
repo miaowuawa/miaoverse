@@ -50,3 +50,55 @@ func (d *InteractsDAO) IsFollowing(userFrom uint32, userTo uint32) (bool, error)
 		Count(&count).Error
 	return count > 0, err
 }
+
+// CountFollowing 统计 userID 正在关注的用户数量
+func (d *InteractsDAO) CountFollowing(userID uint32) (int64, error) {
+	var count int64
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Where("user_from = ? AND type = ? AND status = ?",
+			userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		Count(&count).Error
+	return count, err
+}
+
+// CountFollowers 统计关注 userID 的用户数量
+func (d *InteractsDAO) CountFollowers(userID uint32) (int64, error) {
+	var count int64
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Where("user_to = ? AND type = ? AND status = ?",
+			userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		Count(&count).Error
+	return count, err
+}
+
+// QueryFollowingByUser 分页查询 userID 正在关注的用户列表（user_from = userID）
+func (d *InteractsDAO) QueryFollowingByUser(userID uint32, offset, limit int) ([]modelinteracts.Interacts, error) {
+	var list []modelinteracts.Interacts
+	err := d.DB.Where("user_from = ? AND type = ? AND status = ?",
+		userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		Order("id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+// QueryFollowersByUser 分页查询关注 userID 的用户列表（user_to = userID）
+func (d *InteractsDAO) QueryFollowersByUser(userID uint32, offset, limit int) ([]modelinteracts.Interacts, error) {
+	var list []modelinteracts.Interacts
+	err := d.DB.Where("user_to = ? AND type = ? AND status = ?",
+		userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		Order("id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+// CountMomentLikesReal 统计动态实际点赞数（type=like, target_type=moment, status=normal）
+func (d *InteractsDAO) CountMomentLikesReal(momentID uint64) (int64, error) {
+	var count int64
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Where("target_id = ? AND type = ? AND target_type = ? AND status = ?",
+			momentID, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
+		Count(&count).Error
+	return count, err
+}

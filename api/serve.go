@@ -10,6 +10,7 @@ import (
 	usermoment "miaoverse/api/routers/v1/user/moment"
 	"miaoverse/api/routers/v1/user/profile"
 	userpunishment "miaoverse/api/routers/v1/user/punishment"
+	userrelation "miaoverse/api/routers/v1/user/relation"
 	"miaoverse/middleware"
 	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/server"
@@ -88,5 +89,11 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	})
 	userGroup.Get("/users/:uid/info", func(c fiber.Ctx) error {
 		return profile.GetUserInfoHandler(c, servants)
+	})
+	userGroup.Get("/users/:uid/following", func(c fiber.Ctx) error {
+		return userrelation.FollowingHandler(c, servants)
+	})
+	userGroup.Get("/users/:uid/followers", func(c fiber.Ctx) error {
+		return userrelation.FollowersHandler(c, servants)
 	})
 }

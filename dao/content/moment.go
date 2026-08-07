@@ -6,7 +6,14 @@ import (
 )
 
 func (d *ContentDAO) CreateMoment(m moment.Moment) (*moment.Moment, error) {
-	if err := d.DB.Create(&m).Error; err != nil {
+	err := d.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&m).Error; err != nil {
+			return err
+		}
+		// 同步创建计数元数据，保证后续计数自增有目标行
+		return tx.Create(&moment.MomentMetaData{MomentID: m.ID}).Error
+	})
+	if err != nil {
 		return nil, err
 	}
 	return &m, nil
@@ -105,4 +112,26 @@ func (d *ContentDAO) QueryMomentMetas(momentIDs []uint64) (map[uint64]moment.Mom
 		result[meta.MomentID] = meta
 	}
 	return result, nil
+}
+
+// QueryAllMomentIDs 查询全部动态 ID（用于定期计数校准）
+func (d *ContentDAO) QueryAllMomentIDs() ([]moment.Moment, error) {
+	var list []moment.Moment
+	err := d.DB.Select("id").Find(&list).Error
+	return list, err
+}
+
+// SetMomentMetaCounts 批量覆盖动态计数（用于定期校准，保证 metadata 与实际数量同步）
+func (d *ContentDAO) SetMomentMetaCounts(updates map[uint64]moment.MomentMetaData) error {
+	for momentID, meta := range updates {
+		if err := d.DB.Model(&moment.MomentMetaData{}).
+			Where("moment_id = ?", momentID).
+			Updates(map[string]any{
+				"like_count":    meta.LikeCount,
+				"comment_count": meta.CommentCount,
+			}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }

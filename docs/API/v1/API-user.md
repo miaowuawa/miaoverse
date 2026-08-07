@@ -1011,6 +1011,75 @@ curl -i http://localhost:3000/api/v1/user/punishments \
 | `401` | 未登录或 session 中没有 `UID` |
 | `500` | 数据库查询异常 |
 
+## 获取用户关注/粉丝列表
+
+### `GET /api/v1/user/users/:uid/following`
+
+分页获取目标用户关注的用户列表。
+
+### `GET /api/v1/user/users/:uid/followers`
+
+分页获取目标用户的粉丝（关注了目标用户的人）列表。
+
+查看者与目标用户之间存在任意一方拉黑关系时不可查询。
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `offset` | number | 否 | 偏移量，默认 `0` |
+| `limit` | number | 否 | 每页数量，默认 `20`，最大 `100` |
+
+#### 请求示例
+
+```bash
+curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=20" \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "count": 12,
+  "users": [
+    {
+      "id": 20003,
+      "username": "user_xxx",
+      "nickname": "nickname_xxx",
+      "region": 86,
+      "avatar": "",
+      "gender": 0,
+      "status": 1,
+      "created_at": "2026-06-01T12:00:00+08:00",
+      "updated_at": "2026-06-01T12:00:00+08:00",
+      "block_status": 0
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `count` | number | 总数 |
+| `users` | array | 用户列表，字段与 `user` 表一致 |
+| `users[].block_status` | number | 当前登录用户对列表中每个用户的关系状态（位组合）：`0` 无关系，`1` 拉黑，`2` 屏蔽，`4` 不想看 |
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `uid` 非法、`offset`/`limit` 取值非法 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 查看者与目标用户存在任意一方的拉黑关系，body 中 `code` 为 `40301`（见 `API-errors.md`） |
+| `500` | 数据库或 Redis 查询异常 |
+
 ## 推荐调用流程
 
 ### 首次短信登录或自动注册

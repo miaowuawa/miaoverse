@@ -152,3 +152,12 @@ func CommentCreated(ctx fiber.Ctx, comment CommentInfo) error {
 		Comment: comment,
 	})
 }
+
+func RelationList(ctx fiber.Ctx, count int64, users []RelationUser) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgRelationList{
+		Code:  fiber.StatusOK,
+		Msg:   i18n.Message(ctx, i18n.OKRelationList),
+		Count: count,
+		Users: users,
+	})
+}
