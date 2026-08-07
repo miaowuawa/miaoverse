@@ -5,6 +5,7 @@ import (
 	fiberstoreredis "github.com/gofiber/storage/redis/v3"
 	"miaoverse/dao/content"
 	"miaoverse/dao/user"
+	"miaoverse/service/UserBlock"
 	storages3 "miaoverse/service/s3"
 	"miaoverse/service/security/sms/codemanager"
 	"miaoverse/service/security/sms/smsbao"
@@ -17,6 +18,7 @@ type Servants struct {
 	Validator           *validator.Validate
 	UserServant         *user.UserDAO
 	ContentServant      *content.ContentDAO
+	BlockServant        *UserBlock.Servant
 	S3Servant           *storages3.Servant
 	MaxUploadFileSize   int64
 }

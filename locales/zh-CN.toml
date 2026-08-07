@@ -32,6 +32,7 @@ language = "zh-CN"
 "ok.file_uploaded" = "上传成功"
 "ok.file_temp_link" = "获取成功"
 "ok.moment_published" = "发布成功"
+"ok.block_updated" = "操作成功"
 "sms.action.login_register" = "登录或注册"
 
 [plurals."example.items"]

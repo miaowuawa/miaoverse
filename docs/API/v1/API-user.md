@@ -659,6 +659,68 @@ curl -i -X POST http://localhost:3000/api/v1/user/moments \
 | `401` | 未登录或 session 中没有 `UID` |
 | `500` | 数据库写入异常 |
 
+## 拉黑/屏蔽/不想看
+
+### `POST /api/v1/user/blocks`
+
+对目标用户执行拉黑、屏蔽或不想看操作，或取消对应操作。每个用户每种关系类型对应一个 Redis Bitmap（RoaringBitmap 序列化存储），首次操作自动初始化。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "target": 20002,
+  "type": 1,
+  "action": "add"
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+| --- | --- | --- | --- | --- |
+| `target` | number | 是 | 大于 0，且不能等于当前登录用户 ID | 目标用户 ID |
+| `type` | number | 是 | `1` 拉黑，`2` 屏蔽，`3` 不想看 | 关系类型 |
+| `action` | string | 是 | `add` 或 `remove` | 操作：`add` 添加，`remove` 取消 |
+
+#### 请求示例
+
+```bash
+curl -i -X POST http://localhost:3000/api/v1/user/blocks \
+  -H "Content-Type: application/json" \
+  -b cookie.txt \
+  -d '{"target":20002,"type":1,"action":"add"}'
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "操作成功",
+  "target": 20002,
+  "type": 1,
+  "action": "add"
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、`target` 为 0 或等于当前用户、`type` 非法、`action` 不是 `add`/`remove` |
+| `401` | 未登录或 session 中没有 `UID` |
+| `500` | Redis 读写异常 |
+
 ## 推荐调用流程
 
 ### 首次短信登录或自动注册

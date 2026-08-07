@@ -2,6 +2,7 @@ package api
 
 import (
 	"miaoverse/api/routers/v1/sms"
+	userblock "miaoverse/api/routers/v1/user/block"
 	userfile "miaoverse/api/routers/v1/user/file"
 	"miaoverse/api/routers/v1/user/login"
 	usermoment "miaoverse/api/routers/v1/user/moment"
@@ -65,5 +66,8 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	})
 	userGroup.Post("/moments", func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
+	})
+	userGroup.Post("/blocks", func(c fiber.Ctx) error {
+		return userblock.UpdateHandler(c, servants)
 	})
 }

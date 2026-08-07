@@ -51,6 +51,7 @@ const (
 	OKFileUploaded         MessageKey = "ok.file_uploaded"
 	OKFileTempLink         MessageKey = "ok.file_temp_link"
 	OKMomentPublished      MessageKey = "ok.moment_published"
+	OKBlockUpdated         MessageKey = "ok.block_updated"
 	SMSActionLoginRegister MessageKey = "sms.action.login_register"
 )
 
@@ -383,7 +384,7 @@ func resetCatalog() {
 			ErrPhoneNotBound:         {Other: "先绑定手机号再操作哦～"},
 			ErrPasswordNotSet:        {Other: "先设置密码再操作哦～"},
 			ErrCertificationRequired: {Other: "先完成账号认证再操作哦～"},
-			ErrInvalidReferrer:       {Other: "请求来源不可信，请从正确页面重新操作"},
+			ErrInvalidReferrer:       {Other: "操作失败啦，请再次打开页面重新操作"},
 
 			OKSMSSent:              {Other: "发送成功"},
 			OKLogin:                {Other: "登录成功"},
@@ -392,6 +393,7 @@ func resetCatalog() {
 			OKChooseLoginAccount:   {Other: "请选择要登录的账号"},
 			OKUserInfoUpdated:      {Other: "用户信息修改成功"},
 			OKMomentPublished:      {Other: "发布成功"},
+			OKBlockUpdated:         {Other: "操作成功"},
 			SMSActionLoginRegister: {Other: "登录或注册"},
 		},
 	}

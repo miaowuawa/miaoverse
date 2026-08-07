@@ -65,3 +65,13 @@ func MomentPublished(ctx fiber.Ctx, moment MomentInfo) error {
 		Moment: moment,
 	})
 }
+
+func BlockUpdated(ctx fiber.Ctx, target uint32, blockType uint8, action string) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgBlock{
+		Code:   fiber.StatusOK,
+		Msg:    i18n.Message(ctx, i18n.OKBlockUpdated),
+		Target: target,
+		Type:   blockType,
+		Action: action,
+	})
+}

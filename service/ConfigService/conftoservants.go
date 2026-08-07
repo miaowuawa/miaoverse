@@ -13,6 +13,7 @@ import (
 	"miaoverse/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
+	"miaoverse/service/UserBlock"
 	storages3 "miaoverse/service/s3"
 	"miaoverse/service/security/sms/codemanager"
 	"miaoverse/service/security/sms/smsbao"
@@ -91,6 +92,9 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 	//init content DAO
 	contentdao := &content.ContentDAO{}
 	contentdao.DB = db
+
+	//init user block bitmap servant
+	blockServant := UserBlock.NewServant(smsRedisClient, conf.Cache.DB)
 	//step3 validator
 	validator := validator2.New()
 	err = util.Validate.InitialValidator(validator)
@@ -125,6 +129,7 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		CodeManager:         codeManager,
 		UserServant:         userdao,
 		ContentServant:      contentdao,
+		BlockServant:        blockServant,
 		Validator:           validator,
 		S3Servant:           s3Servant,
 		MaxUploadFileSize:   conf.UploadMaxFileSizeBytes(),
