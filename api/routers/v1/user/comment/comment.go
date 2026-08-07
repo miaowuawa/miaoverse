@@ -18,7 +18,7 @@ const (
 	maxCommentLen = 1000
 )
 
-// CreateHandler 给动态发送评论。被拉黑/拉黑对方或评论权限不允许时拒绝。
+// CreateHandler 给动态发送评论。拉黑校验由 RequireNoBlock 中间件完成，评论权限在此校验。
 func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
@@ -38,23 +38,9 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.BadRequest(ctx)
 	}
 
-	moment, err := servants.ContentServant.QueryMomentByID(req.MomentID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return resp.FileNotFound(ctx)
-		}
-		return resp.ServerError(ctx)
-	}
-	if moment.Status != modelmoment.MomentStatusNormal {
+	moment, ok := middleware.BlockMoment(ctx)
+	if !ok {
 		return resp.FileNotFound(ctx)
-	}
-
-	blocked, err := servants.BlockServant.IsBlockedEither(ctx.Context(), uid, moment.UserID)
-	if err != nil {
-		return resp.ServerError(ctx)
-	}
-	if blocked {
-		return resp.Blocked(ctx)
 	}
 
 	if err := checkCommentPermission(ctx, servants, uid, moment); err != nil {

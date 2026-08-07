@@ -33,7 +33,7 @@ func listRelation(ctx fiber.Ctx, servants *server.Servants, isFollower bool) err
 		return resp.Unauthorized(ctx)
 	}
 
-	targetID, ok := parseTargetID(ctx)
+	targetID, ok := middleware.BlockTarget(ctx)
 	if !ok {
 		return resp.BadRequest(ctx)
 	}
@@ -43,18 +43,10 @@ func listRelation(ctx fiber.Ctx, servants *server.Servants, isFollower bool) err
 		return resp.BadRequest(ctx)
 	}
 
-	// 拉黑/被拉黑不能查询
-	blocked, err := servants.BlockServant.IsBlockedEither(ctx.Context(), uid, targetID)
-	if err != nil {
-		return resp.ServerError(ctx)
-	}
-	if blocked {
-		return resp.Blocked(ctx)
-	}
-
 	var (
 		interacts []modelinteracts.Interacts
 		count     int64
+		err       error
 	)
 	if isFollower {
 		count, err = servants.InteractsServant.CountFollowers(targetID)
@@ -114,18 +106,6 @@ func listRelation(ctx fiber.Ctx, servants *server.Servants, isFollower bool) err
 	}
 
 	return resp.RelationList(ctx, count, items)
-}
-
-func parseTargetID(ctx fiber.Ctx) (uint32, bool) {
-	value := strings.TrimSpace(ctx.Params("uid"))
-	if value == "" {
-		return 0, false
-	}
-	id, err := strconv.ParseUint(value, 10, 32)
-	if err != nil || id == 0 {
-		return 0, false
-	}
-	return uint32(id), true
 }
 
 func parsePagination(ctx fiber.Ctx) (int, int, bool) {
