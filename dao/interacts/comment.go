@@ -76,29 +76,41 @@ func (d *InteractsDAO) CreateReplyCommentAndInteract(comment modelinteracts.Comm
 	return &comment, nil
 }
 
-// QueryCommentRepliesByRoot 查询楼中楼完整回复列表：以 rootID 为根，按 target 链逐层收集全部子孙回复。
-// 返回按 id 升序的扁平列表（仅 status=normal），maxDepth 限制最大嵌套层数。
+// QueryCommentRepliesByRoot 查询楼中楼完整回复列表：以 rootID 为根，用递归 CTE（WITH RECURSIVE）
+// 在数据库内部做迭代式 BFS，单条 SQL 一次往返收集全部子孙回复。
+// 相比逐层循环：无多次往返、无逐层膨胀的超大 IN 列表，且每行扩展都走 idx_comment_target 索引。
+// 返回按 id 升序的扁平列表（仅 status=normal）；maxDepth 限制最大嵌套层数，防止脏数据成环导致无限递归。
+// 要求 MySQL 8.0+ / MariaDB 10.2+（WITH RECURSIVE）。
 func (d *InteractsDAO) QueryCommentRepliesByRoot(rootID uint64, maxDepth int) ([]modelinteracts.Comment, error) {
-	var all []modelinteracts.Comment
-	ids := []uint64{rootID}
-	for depth := 0; depth < maxDepth; depth++ {
-		var level []modelinteracts.Comment
-		if err := d.DB.Where("target_id IN ? AND target_type = ? AND status = ?",
-			ids, modelinteracts.CommentTargetComment, modelinteracts.CommentStatusNormal).
-			Order("id ASC").
-			Find(&level).Error; err != nil {
-			return nil, err
-		}
-		if len(level) == 0 {
-			break
-		}
-		all = append(all, level...)
-		ids = ids[:0]
-		for i := range level {
-			ids = append(ids, level[i].ID)
-		}
+	const sql = `
+WITH RECURSIVE reply_tree AS (
+    SELECT id, user_id, target_id, target_type, content, status, created_at, updated_at, 0 AS depth
+    FROM comment
+    WHERE id = ? AND status = ?
+    UNION ALL
+    SELECT c.id, c.user_id, c.target_id, c.target_type, c.content, c.status, c.created_at, c.updated_at, rt.depth + 1
+    FROM comment c
+    INNER JOIN reply_tree rt ON c.target_id = rt.id
+    WHERE c.target_type = ? AND c.status = ? AND rt.depth < ?
+)
+SELECT id, user_id, target_id, target_type, content, status, created_at, updated_at
+FROM reply_tree
+WHERE id <> ?
+ORDER BY id ASC`
+
+	var list []modelinteracts.Comment
+	err := d.DB.Raw(sql,
+		rootID,
+		modelinteracts.CommentStatusNormal,
+		modelinteracts.CommentTargetComment,
+		modelinteracts.CommentStatusNormal,
+		maxDepth,
+		rootID,
+	).Scan(&list).Error
+	if err != nil {
+		return nil, err
 	}
-	return all, nil
+	return list, nil
 }
 
 // CountMomentCommentsReal 统计动态实际评论数（target_type=moment, status=normal）。
