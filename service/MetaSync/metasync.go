@@ -5,19 +5,13 @@ import (
 	"log"
 	"time"
 
+	"miaoverse/consts"
 	modelmoment "miaoverse/model/dao/moment"
 	"miaoverse/model/server"
 )
 
-const (
-	// reconcileWindow 增量校准窗口：只校准最近更新过的动态
-	reconcileWindow = 30 * time.Minute
-	// batchSize 每批处理的动态数量，避免单次 SQL 过大
-	batchSize = 500
-)
-
 // Start 启动动态计数定期校准任务，保证 moment_meta 与实际数量同步。
-// 采用增量校准：只重算最近 reconcileWindow 内有更新的动态，分批聚合统计后批量 upsert。
+// 采用增量校准：只重算最近 consts.MetaSyncReconcileWindow 内有更新的动态，分批聚合统计后批量 upsert。
 // 定时任务由调用方（cmd 启动流程）负责关闭。
 func Start(ctx context.Context, servants *server.Servants, interval time.Duration) {
 	if servants == nil || servants.ContentServant == nil || servants.InteractsServant == nil {
@@ -45,10 +39,10 @@ func Start(ctx context.Context, servants *server.Servants, interval time.Duratio
 }
 
 // ReconcileMomentMetas 增量校准动态计数。
-// 只处理最近 reconcileWindow 内更新过的动态，按 batchSize 分批：
+// 只处理最近 consts.MetaSyncReconcileWindow 内更新过的动态，按 consts.MetaSyncBatchSize 分批：
 // 每批用 2 条 GROUP BY 聚合查询拿到真实点赞/评论数，再单条 SQL 批量 upsert。
 func ReconcileMomentMetas(ctx context.Context, servants *server.Servants) error {
-	since := time.Now().Add(-reconcileWindow)
+	since := time.Now().Add(-consts.MetaSyncReconcileWindow)
 	ids, err := servants.ContentServant.QueryRecentMomentIDs(since)
 	if err != nil {
 		return err
@@ -57,8 +51,8 @@ func ReconcileMomentMetas(ctx context.Context, servants *server.Servants) error 
 		return nil
 	}
 
-	for start := 0; start < len(ids); start += batchSize {
-		end := start + batchSize
+	for start := 0; start < len(ids); start += consts.MetaSyncBatchSize {
+		end := start + consts.MetaSyncBatchSize
 		if end > len(ids) {
 			end = len(ids)
 		}

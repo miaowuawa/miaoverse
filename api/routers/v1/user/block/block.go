@@ -4,16 +4,12 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"miaoverse/consts"
 	"miaoverse/middleware"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/dto/user/blockreq"
 	"miaoverse/model/server"
 	"miaoverse/service/UserBlock"
-)
-
-const (
-	actionAdd    = "add"
-	actionRemove = "remove"
 )
 
 func UpdateHandler(ctx fiber.Ctx, servants *server.Servants) error {
@@ -38,11 +34,11 @@ func UpdateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if blockType != UserBlock.BlockTypeBlock && blockType != UserBlock.BlockTypeMute && blockType != UserBlock.BlockTypeUnwatch {
 		return resp.BadRequest(ctx)
 	}
-	if action != actionAdd && action != actionRemove {
+	if action != consts.ActionAdd && action != consts.ActionRemove {
 		return resp.BadRequest(ctx)
 	}
 
-	if action == actionAdd {
+	if action == consts.ActionAdd {
 		if err := servants.BlockServant.Add(ctx.Context(), uid, blockType, req.Target); err != nil {
 			return resp.ServerError(ctx)
 		}

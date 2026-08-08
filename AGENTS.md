@@ -71,9 +71,22 @@ DAO 不应该做：
 
 ### `model/dao/`
 
-只放数据库模型结构体、表名、状态常量。
+只放数据库模型结构体、表名。
 
 不要在 model 里写数据库访问方法，也不要写 HTTP 响应逻辑。
+
+### `consts/`
+
+所有业务/领域常量集中放在 `consts` 包，按域拆文件：
+
+- `user.go`：账号状态、权限位（Perm*）、惩罚状态、资料长度限制。
+- `moment.go` / `comment.go` / `interact.go` / `file.go` / `notify.go`：各内容/互动域的状态、类型、权限、限制常量。
+- `key.go`：中间件 Locals key、Session key、Redis key 前缀。
+- `s3.go` / `misc.go`：S3 时长、时间格式、UA 类型、默认值等杂项。
+
+常量命名带域前缀（如 `MomentStatusNormal`、`CommentTargetComment`、`UserStatusBanned`），后续统一修改限制或状态值时只改 `consts` 即可。
+
+例外：与包内自定义类型强绑定的常量（如 `i18n.MessageKey`、`UserCheck.Failure`、`UserBlock.BlockType*`）保留在类型定义所在包，避免 `consts` 反向依赖业务包。
 
 ### `model/dto/`
 

@@ -6,17 +6,12 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	"miaoverse/middleware"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/dto/user/updatereq"
 	"miaoverse/model/server"
 	"miaoverse/service/i18n"
-)
-
-const (
-	maxUsernameLen = 64
-	maxNicknameLen = 64
-	maxAvatarLen   = 255
 )
 
 func UpdateFullHandler(ctx fiber.Ctx, servants *server.Servants) error {
@@ -146,11 +141,11 @@ func patchUpdates(req *updatereq.ProfilePatch) (map[string]any, bool) {
 }
 
 func validUsername(value string) bool {
-	return value != "" && len(value) <= maxUsernameLen
+	return value != "" && len(value) <= consts.MaxUsernameLen
 }
 
 func validNickname(value string) bool {
-	return value != "" && len(value) <= maxNicknameLen
+	return value != "" && len(value) <= consts.MaxNicknameLen
 }
 
 func validRegion(value uint16) bool {
@@ -158,7 +153,7 @@ func validRegion(value uint16) bool {
 }
 
 func validAvatar(value string) bool {
-	return len(value) <= maxAvatarLen
+	return len(value) <= consts.MaxAvatarLen
 }
 
 func validGender(value uint8) bool {

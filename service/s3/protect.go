@@ -11,11 +11,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
-)
 
-const (
-	tempSignatureVersion  = "v1"
-	tempSignatureClockGap = time.Minute
+	"miaoverse/consts"
 )
 
 var (
@@ -85,7 +82,7 @@ func (s *Servant) createTempSignature(uid string, now time.Time) (*TempSignature
 	}
 
 	encodedPayload := base64.RawURLEncoding.EncodeToString(payload)
-	signedValue := tempSignatureVersion + "." + encodedPayload
+	signedValue := consts.TempSignatureVersion + "." + encodedPayload
 	signature := base64.RawURLEncoding.EncodeToString(s.signTempPayload(signedValue))
 
 	return &TempSignature{
@@ -106,7 +103,7 @@ func (s *Servant) verifyTempSignature(uid string, signature string, now time.Tim
 	}
 
 	parts := strings.Split(strings.TrimSpace(signature), ".")
-	if len(parts) != 3 || parts[0] != tempSignatureVersion {
+	if len(parts) != 3 || parts[0] != consts.TempSignatureVersion {
 		return nil, ErrTempSignatureInvalid
 	}
 
@@ -138,7 +135,7 @@ func (s *Servant) verifyTempSignature(uid string, signature string, now time.Tim
 
 	issuedAt := time.Unix(payload.Timestamp, 0).UTC()
 	now = now.UTC()
-	if issuedAt.After(now.Add(tempSignatureClockGap)) {
+	if issuedAt.After(now.Add(consts.TempSignatureClockGap)) {
 		return nil, fmt.Errorf("%w: timestamp is in the future", ErrTempSignatureInvalid)
 	}
 	if now.After(issuedAt.Add(s.tempSignatureTTL)) {

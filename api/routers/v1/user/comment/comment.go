@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	"miaoverse/middleware"
 	modelinteracts "miaoverse/model/dao/interacts"
 	modelmoment "miaoverse/model/dao/moment"
@@ -13,11 +14,6 @@ import (
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
 	"miaoverse/util/pagination"
-)
-
-const (
-	maxCommentLen        = 1000
-	maxConversationDepth = 10 // 楼中楼对话最大收集层数（一般 2-3 层即可覆盖）
 )
 
 // CreateHandler 给动态发送评论。拉黑校验由 RequireNoBlock 中间件完成，评论权限在此校验。
@@ -36,7 +32,7 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	content := strings.TrimSpace(req.Content)
-	if req.MomentID == 0 || content == "" || len(content) > maxCommentLen {
+	if req.MomentID == 0 || content == "" || len(content) > consts.MaxCommentLen {
 		return resp.BadRequest(ctx)
 	}
 
@@ -52,9 +48,9 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	comment := modelinteracts.Comment{
 		UserID:     uid,
 		TargetID:   moment.ID,
-		TargetType: modelinteracts.CommentTargetMoment,
+		TargetType: consts.CommentTargetMoment,
 		Content:    content,
-		Status:     modelinteracts.CommentStatusNormal,
+		Status:     consts.CommentStatusNormal,
 	}
 	created, err := servants.InteractsServant.CreateCommentAndMeta(comment, moment.ID, moment.UserID)
 	if err != nil {
@@ -81,7 +77,7 @@ func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	content := strings.TrimSpace(req.Content)
-	if content == "" || len(content) > maxCommentLen {
+	if content == "" || len(content) > consts.MaxCommentLen {
 		return resp.BadRequest(ctx)
 	}
 
@@ -105,18 +101,18 @@ func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	comment := modelinteracts.Comment{
 		UserID:     uid,
 		TargetID:   replied.ID,
-		TargetType: modelinteracts.CommentTargetComment,
+		TargetType: consts.CommentTargetComment,
 		Content:    content,
-		Status:     modelinteracts.CommentStatusNormal,
+		Status:     consts.CommentStatusNormal,
 	}
 	interact := modelinteracts.Interacts{
 		UserFrom:    uid,
 		UserTo:      replied.UserID,
 		TargetID:    replied.ID,
 		ReferenceID: root.ID,
-		Type:        modelinteracts.InteractTypeReply,
-		TargetType:  modelinteracts.InteractTargetComment,
-		Status:      modelinteracts.InteractStatusNormal,
+		Type:        consts.InteractTypeReply,
+		TargetType:  consts.InteractTargetComment,
+		Status:      consts.InteractStatusNormal,
 	}
 	created, err := servants.InteractsServant.CreateReplyCommentAndInteract(comment, interact)
 	if err != nil {
@@ -146,7 +142,7 @@ func ConversationHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.BadRequest(ctx)
 	}
 
-	replies, err := servants.InteractsServant.QueryCommentRepliesByRoot(root.ID, maxConversationDepth)
+	replies, err := servants.InteractsServant.QueryCommentRepliesByRoot(root.ID, consts.MaxConversationDepth)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
@@ -205,9 +201,9 @@ func toReplyInfo(c *modelinteracts.Comment, momentID uint64, replyToUserID uint3
 // 0 全部可评论；1 仅好友（互相关注）；2 仅粉丝（动态作者关注了评论者）；3 全部不可评论。
 func checkCommentPermission(ctx fiber.Ctx, servants *server.Servants, uid uint32, m *modelmoment.Moment) error {
 	switch m.CommentPermission {
-	case modelmoment.MomentCommentPermissionAll:
+	case consts.MomentCommentPermissionAll:
 		return nil
-	case modelmoment.MomentCommentPermissionFriends:
+	case consts.MomentCommentPermissionFriends:
 		following, err := servants.InteractsServant.IsFollowing(uid, m.UserID)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return resp.ServerError(ctx)
@@ -223,7 +219,7 @@ func checkCommentPermission(ctx fiber.Ctx, servants *server.Servants, uid uint32
 			return resp.FileNotShared(ctx)
 		}
 		return nil
-	case modelmoment.MomentCommentPermissionFans:
+	case consts.MomentCommentPermissionFans:
 		following, err := servants.InteractsServant.IsFollowing(m.UserID, uid)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return resp.ServerError(ctx)
@@ -232,7 +228,7 @@ func checkCommentPermission(ctx fiber.Ctx, servants *server.Servants, uid uint32
 			return resp.FileNotShared(ctx)
 		}
 		return nil
-	case modelmoment.MomentCommentPermissionNone:
+	case consts.MomentCommentPermissionNone:
 		return resp.FileNotShared(ctx)
 	default:
 		return resp.BadRequest(ctx)

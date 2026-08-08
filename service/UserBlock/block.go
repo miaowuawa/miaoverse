@@ -7,6 +7,7 @@ import (
 
 	"github.com/RoaringBitmap/roaring"
 	"github.com/go-redis/redis/v8"
+	"miaoverse/consts"
 )
 
 // BlockType 拉黑/屏蔽/不想看 三种关系类型
@@ -16,11 +17,6 @@ const (
 	BlockTypeBlock   BlockType = 1 // 拉黑
 	BlockTypeMute    BlockType = 2 // 屏蔽
 	BlockTypeUnwatch BlockType = 3 // 不想看
-)
-
-const (
-	blockKeyPrefix = "block:user:"
-	blockKeySuffix = ":"
 )
 
 var (
@@ -47,7 +43,7 @@ func (s *Servant) BlockKey(userID uint32, blockType BlockType) (string, error) {
 	if !validBlockType(blockType) {
 		return "", ErrInvalidBlockType
 	}
-	return fmt.Sprintf("%s%d%s%d", blockKeyPrefix, userID, blockKeySuffix, blockType), nil
+	return fmt.Sprintf("%s%d%s%d", consts.BlockKeyPrefix, userID, consts.BlockKeySuffix, blockType), nil
 }
 
 // Add 将 targetUserID 加入 userID 的指定关系 Bitmap。

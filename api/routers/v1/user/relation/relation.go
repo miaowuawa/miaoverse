@@ -7,15 +7,11 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	"miaoverse/middleware"
 	modelinteracts "miaoverse/model/dao/interacts"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
-)
-
-const (
-	defaultListLimit = 20
-	maxListLimit     = 100
 )
 
 func FollowingHandler(ctx fiber.Ctx, servants *server.Servants) error {
@@ -110,7 +106,7 @@ func listRelation(ctx fiber.Ctx, servants *server.Servants, isFollower bool) err
 
 func parsePagination(ctx fiber.Ctx) (int, int, bool) {
 	offset := 0
-	limit := defaultListLimit
+	limit := consts.DefaultListLimit
 	if raw := strings.TrimSpace(ctx.Query("offset")); raw != "" {
 		value, err := strconv.Atoi(raw)
 		if err != nil || value < 0 {
@@ -120,7 +116,7 @@ func parsePagination(ctx fiber.Ctx) (int, int, bool) {
 	}
 	if raw := strings.TrimSpace(ctx.Query("limit")); raw != "" {
 		value, err := strconv.Atoi(raw)
-		if err != nil || value <= 0 || value > maxListLimit {
+		if err != nil || value <= 0 || value > consts.MaxListLimit {
 			return 0, 0, false
 		}
 		limit = value

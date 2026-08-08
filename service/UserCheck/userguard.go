@@ -6,13 +6,6 @@ import (
 	"miaoverse/model/server"
 )
 
-const (
-	activeUserStatus   uint8 = 1
-	bannedUserStatus   uint8 = 2
-	closedUserStatus   uint8 = 3
-	disabledUserStatus uint8 = 4
-)
-
 type Failure string
 
 const (
@@ -64,13 +57,13 @@ func (r Result) Passed() bool {
 func AccountActive() Check {
 	return func(ctx *Context) Result {
 		switch ctx.User.Status {
-		case activeUserStatus:
+		case consts.UserStatusActive:
 			return OK()
-		case bannedUserStatus:
+		case consts.UserStatusBanned:
 			return Failed(AccountBanned)
-		case closedUserStatus:
+		case consts.UserStatusClosed:
 			return Failed(AccountClosed)
-		case disabledUserStatus:
+		case consts.UserStatusDisabled:
 			return Failed(AccountDisabled)
 		default:
 			return Failed(AccountUnavailable)

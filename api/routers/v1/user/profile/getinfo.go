@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	"miaoverse/middleware"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
@@ -33,7 +34,7 @@ func GetUserInfoHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	// 目标用户处于账号封禁状态（不允许登录）时，返回 40304
-	if user.Status == bannedUserStatus {
+	if user.Status == consts.UserStatusBanned {
 		return resp.TargetPunished(ctx)
 	}
 
@@ -66,5 +67,3 @@ func parseUserID(ctx fiber.Ctx) (uint32, bool) {
 	}
 	return uint32(id), true
 }
-
-const bannedUserStatus uint8 = 2

@@ -5,6 +5,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"miaoverse/consts"
 	"miaoverse/model/dao/moment"
 )
 
@@ -42,7 +43,7 @@ func (d *ContentDAO) QueryMomentsByUser(userID uint32, offset, limit int) ([]mom
 func (d *ContentDAO) CountVisibleMomentsByUser(viewerID uint32, targetUserID uint32, isFriend bool, isFan bool) (int64, error) {
 	var count int64
 	err := d.DB.Model(&moment.Moment{}).
-		Where("user_id = ? AND status = ?", targetUserID, moment.MomentStatusNormal).
+		Where("user_id = ? AND status = ?", targetUserID, consts.MomentStatusNormal).
 		Where(d.visibleMomentScope(viewerID, targetUserID, isFriend, isFan)).
 		Count(&count).Error
 	return count, err
@@ -52,7 +53,7 @@ func (d *ContentDAO) CountVisibleMomentsByUser(viewerID uint32, targetUserID uin
 func (d *ContentDAO) QueryVisibleMomentsByUser(viewerID uint32, targetUserID uint32, isFriend bool, isFan bool, offset, limit int) ([]moment.Moment, error) {
 	var list []moment.Moment
 	err := d.DB.Model(&moment.Moment{}).
-		Where("user_id = ? AND status = ?", targetUserID, moment.MomentStatusNormal).
+		Where("user_id = ? AND status = ?", targetUserID, consts.MomentStatusNormal).
 		Where(d.visibleMomentScope(viewerID, targetUserID, isFriend, isFan)).
 		Order("id DESC").
 		Offset(offset).Limit(limit).
@@ -62,15 +63,15 @@ func (d *ContentDAO) QueryVisibleMomentsByUser(viewerID uint32, targetUserID uin
 
 // visibleMomentScope 构造动态可见性 SQL 条件
 func (d *ContentDAO) visibleMomentScope(viewerID uint32, targetUserID uint32, isFriend bool, isFan bool) *gorm.DB {
-	scope := d.DB.Where("permission = ?", moment.MomentPermissionPublic)
+	scope := d.DB.Where("permission = ?", consts.MomentPermissionPublic)
 	if viewerID == targetUserID {
-		scope = scope.Or("permission = ?", moment.MomentPermissionPrivate)
+		scope = scope.Or("permission = ?", consts.MomentPermissionPrivate)
 	}
 	if isFriend {
-		scope = scope.Or("permission = ?", moment.MomentPermissionFriends)
+		scope = scope.Or("permission = ?", consts.MomentPermissionFriends)
 	}
 	if isFan {
-		scope = scope.Or("permission = ?", moment.MomentPermissionFans)
+		scope = scope.Or("permission = ?", consts.MomentPermissionFans)
 	}
 	return scope
 }
@@ -81,7 +82,7 @@ func (d *ContentDAO) UpdateMoment(id uint64, updates map[string]any) error {
 
 func (d *ContentDAO) DeleteMoment(id uint64) error {
 	return d.DB.Model(&moment.Moment{}).Where("id = ?", id).
-		Update("status", moment.MomentStatusDeleted).Error
+		Update("status", consts.MomentStatusDeleted).Error
 }
 
 func (d *ContentDAO) CreateMomentMeta(meta moment.MomentMetaData) error {

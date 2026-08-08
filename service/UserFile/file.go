@@ -8,14 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
+	"miaoverse/consts"
 	"miaoverse/dao/interacts"
 	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/dto/resp"
 	"miaoverse/service/UserBlock"
 	storages3 "miaoverse/service/s3"
 )
-
-const TimeFormat = "2006-01-02 15:04:05"
 
 var (
 	ErrFileNotShared      = errors.New("file is not shared")
@@ -40,13 +39,13 @@ func SanitizeFileName(value string) string {
 // FileTypeName 将文件大类 uint8 常量转为对外字符串
 func FileTypeName(fileType uint8) string {
 	switch fileType {
-	case modeluser.FileTypeImage:
+	case consts.FileTypeImage:
 		return "image"
-	case modeluser.FileTypeVideo:
+	case consts.FileTypeVideo:
 		return "video"
-	case modeluser.FileTypeAudio:
+	case consts.FileTypeAudio:
 		return "audio"
-	case modeluser.FileTypeDocument:
+	case consts.FileTypeDocument:
 		return "document"
 	default:
 		return "other"
@@ -71,7 +70,7 @@ func ToFileInfo(file *modeluser.File) resp.FileInfo {
 		MimeType:  file.MimeType,
 		FileSize:  file.FileSize,
 		Hash:      HashHex(file.Hash),
-		CreatedAt: file.CreatedAt.Format(TimeFormat),
+		CreatedAt: file.CreatedAt.Format(consts.TimeFormat),
 	}
 }
 
@@ -110,9 +109,9 @@ func CheckSharedAccess(ctx context.Context, block *UserBlock.Servant, interactsS
 	}
 
 	switch permission {
-	case modeluser.FilePermissionPublic:
+	case consts.FilePermissionPublic:
 		return nil
-	case modeluser.FilePermissionFriends:
+	case consts.FilePermissionFriends:
 		following, err := interactsServant.IsFollowing(requesterUID, ownerUID)
 		if err != nil {
 			return err
@@ -121,7 +120,7 @@ func CheckSharedAccess(ctx context.Context, block *UserBlock.Servant, interactsS
 			return ErrFileNotShared
 		}
 		return nil
-	case modeluser.FilePermissionFans:
+	case consts.FilePermissionFans:
 		following, err := interactsServant.IsFollowing(ownerUID, requesterUID)
 		if err != nil {
 			return err

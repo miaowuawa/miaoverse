@@ -1,6 +1,7 @@
 package user
 
 import (
+	"miaoverse/consts"
 	modeluser "miaoverse/model/dao/user"
 )
 
@@ -20,25 +21,25 @@ func (d *UserDAO) QueryNotifiesByUser(userID uint32, offset, limit int) ([]model
 func (d *UserDAO) MarkNotifyRead(id uint64, userID uint32) error {
 	return d.DB.Model(&modeluser.Notify{}).
 		Where("id = ? AND user_id = ?", id, userID).
-		Update("status", modeluser.NotifyStatusRead).Error
+		Update("status", consts.NotifyStatusRead).Error
 }
 
 func (d *UserDAO) MarkAllNotifyRead(userID uint32) error {
 	return d.DB.Model(&modeluser.Notify{}).
-		Where("user_id = ? AND status = ?", userID, modeluser.NotifyStatusUnread).
-		Update("status", modeluser.NotifyStatusRead).Error
+		Where("user_id = ? AND status = ?", userID, consts.NotifyStatusUnread).
+		Update("status", consts.NotifyStatusRead).Error
 }
 
 func (d *UserDAO) DeleteNotify(id uint64, userID uint32) error {
 	return d.DB.Model(&modeluser.Notify{}).
 		Where("id = ? AND user_id = ?", id, userID).
-		Update("status", modeluser.NotifyStatusDeleted).Error
+		Update("status", consts.NotifyStatusDeleted).Error
 }
 
 func (d *UserDAO) CountUnreadNotifies(userID uint32) (int64, error) {
 	var count int64
 	err := d.DB.Model(&modeluser.Notify{}).
-		Where("user_id = ? AND status = ?", userID, modeluser.NotifyStatusUnread).
+		Where("user_id = ? AND status = ?", userID, consts.NotifyStatusUnread).
 		Count(&count).Error
 	return count, err
 }

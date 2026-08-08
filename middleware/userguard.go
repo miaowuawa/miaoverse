@@ -6,17 +6,13 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
 	"miaoverse/service/UserCheck"
 	"miaoverse/service/UserSession"
 	"miaoverse/service/i18n"
-)
-
-const (
-	userLocalKey = "miaoverse.user"
-	uidLocalKey  = "miaoverse.uid"
 )
 
 func RequireUser(servants *server.Servants, checks ...UserCheck.Check) fiber.Handler {
@@ -35,8 +31,8 @@ func RequireUser(servants *server.Servants, checks ...UserCheck.Check) fiber.Han
 		}
 
 		userCtx := UserCheck.NewContext(uid, u, servants)
-		ctx.Locals(uidLocalKey, uid)
-		ctx.Locals(userLocalKey, userCtx)
+		ctx.Locals(consts.UIDLocalKey, uid)
+		ctx.Locals(consts.UserLocalKey, userCtx)
 
 		for _, check := range checks {
 			if check == nil {
@@ -61,14 +57,14 @@ func RequireUser(servants *server.Servants, checks ...UserCheck.Check) fiber.Han
 }
 
 func CurrentUID(ctx fiber.Ctx) (uint32, bool) {
-	if uid, ok := ctx.Locals(uidLocalKey).(uint32); ok {
+	if uid, ok := ctx.Locals(consts.UIDLocalKey).(uint32); ok {
 		return uid, true
 	}
 	return UserSession.CurrentUID(ctx)
 }
 
 func CurrentUser(ctx fiber.Ctx) (*modeluser.User, bool) {
-	userCtx, ok := ctx.Locals(userLocalKey).(*UserCheck.Context)
+	userCtx, ok := ctx.Locals(consts.UserLocalKey).(*UserCheck.Context)
 	if !ok || userCtx == nil || userCtx.User == nil {
 		return nil, false
 	}

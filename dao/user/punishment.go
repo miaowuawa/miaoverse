@@ -3,6 +3,7 @@ package user
 import (
 	"time"
 
+	"miaoverse/consts"
 	modeluser "miaoverse/model/dao/user"
 )
 
@@ -21,7 +22,7 @@ func (d *UserDAO) HasActivePunishment(userID uint32, perm uint32, now time.Time)
 	var count int64
 	err := d.DB.Model(&modeluser.Punishment{}).
 		Where("user_id = ? AND punishment_status = ? AND (punishment_end_time IS NULL OR punishment_end_time > ?)",
-			userID, modeluser.PunishmentStatusActive, now).
+			userID, consts.PunishmentStatusActive, now).
 		Where("(punishment_type & ?) = ?", perm, perm).
 		Count(&count).Error
 	return count > 0, err
@@ -32,7 +33,7 @@ func (d *UserDAO) QueryActivePunishmentMask(userID uint32, now time.Time) (uint3
 	var types []uint32
 	err := d.DB.Model(&modeluser.Punishment{}).
 		Where("user_id = ? AND punishment_status = ? AND (punishment_end_time IS NULL OR punishment_end_time > ?)",
-			userID, modeluser.PunishmentStatusActive, now).
+			userID, consts.PunishmentStatusActive, now).
 		Pluck("punishment_type", &types).Error
 	if err != nil {
 		return 0, err

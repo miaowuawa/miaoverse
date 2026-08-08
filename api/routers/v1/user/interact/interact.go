@@ -2,14 +2,10 @@ package interact
 
 import (
 	"github.com/gofiber/fiber/v3"
+	"miaoverse/consts"
 	"miaoverse/middleware"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
-)
-
-const (
-	actionFollow = "follow"
-	actionLike   = "like"
 )
 
 // FollowHandler 关注用户。拉黑/屏蔽/不想看校验由 RequireNoBlock 中间件完成。
@@ -28,7 +24,7 @@ func FollowHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	return resp.InteractOK(ctx, uint64(targetID), actionFollow)
+	return resp.InteractOK(ctx, uint64(targetID), consts.ActionFollow)
 }
 
 // LikeHandler 给动态点赞。拉黑校验由 RequireNoBlock 中间件完成。
@@ -47,5 +43,5 @@ func LikeHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	return resp.InteractOK(ctx, moment.ID, actionLike)
+	return resp.InteractOK(ctx, moment.ID, consts.ActionLike)
 }

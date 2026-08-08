@@ -1,6 +1,9 @@
 package api
 
 import (
+	"time"
+
+	"github.com/gofiber/fiber/v3"
 	"miaoverse/api/routers/v1/sms"
 	userblock "miaoverse/api/routers/v1/user/block"
 	usercomment "miaoverse/api/routers/v1/user/comment"
@@ -12,13 +15,10 @@ import (
 	"miaoverse/api/routers/v1/user/profile"
 	userpunishment "miaoverse/api/routers/v1/user/punishment"
 	userrelation "miaoverse/api/routers/v1/user/relation"
+	"miaoverse/consts"
 	"miaoverse/middleware"
-	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/service/UserCheck"
-	"time"
-
-	"github.com/gofiber/fiber/v3"
 )
 
 func Initial(app *fiber.App, servants *server.Servants) {
@@ -70,17 +70,17 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	userGroup.Get("/files/:uuid/shared-link", func(c fiber.Ctx) error {
 		return userfile.SharedTempLinkHandler(c, servants)
 	})
-	userGroup.Post("/moments", middleware.RequireNotPunished(servants, modeluser.PermPost), func(c fiber.Ctx) error {
+	userGroup.Post("/moments", middleware.RequireNotPunished(servants, consts.PermPost), func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
 	})
 	// 评论动态。接口按内容类型（moments/...）划分，后续文章等类型使用各自的子路径。
-	userGroup.Post("/moments/comments", middleware.RequireNotPunished(servants, modeluser.PermComment),
+	userGroup.Post("/moments/comments", middleware.RequireNotPunished(servants, consts.PermComment),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return usercomment.CreateHandler(c, servants)
 		})
 	// 回复动态下的评论（楼中楼）：先校验与动态作者的拉黑关系，再校验与被回复评论作者的拉黑关系。
-	userGroup.Post("/moments/comments/:id/replies", middleware.RequireNotPunished(servants, modeluser.PermComment),
+	userGroup.Post("/moments/comments/:id/replies", middleware.RequireNotPunished(servants, consts.PermComment),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor, AllowSelf: true}),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
@@ -93,13 +93,13 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		func(c fiber.Ctx) error {
 			return usercomment.ConversationHandler(c, servants)
 		})
-	userGroup.Post("/follows", middleware.RequireNotPunished(servants, modeluser.PermSocial),
+	userGroup.Post("/follows", middleware.RequireNotPunished(servants, consts.PermSocial),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{BodyField: "target", CheckMuteUnwatch: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.FollowHandler(c, servants)
 		})
 	// 给动态点赞。接口按内容类型（moments/...）划分。
-	userGroup.Post("/moments/likes", middleware.RequireNotPunished(servants, modeluser.PermSocial),
+	userGroup.Post("/moments/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.LikeHandler(c, servants)

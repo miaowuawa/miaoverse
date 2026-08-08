@@ -11,6 +11,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	"miaoverse/middleware"
 	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/dto/file/uploadreq"
@@ -19,8 +20,6 @@ import (
 	"miaoverse/service/UserFile"
 	"miaoverse/util"
 )
-
-const formFileField = "file"
 
 func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
@@ -31,7 +30,7 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.StorageUnavailable(ctx)
 	}
 
-	fileHeader, err := ctx.FormFile(formFileField)
+	fileHeader, err := ctx.FormFile(consts.FormFileField)
 	if err != nil || fileHeader == nil {
 		return resp.BadRequest(ctx)
 	}
@@ -43,10 +42,10 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		FileType: strings.TrimSpace(ctx.FormValue("file_type")),
 	}
 	permission := req.Permission
-	if permission != modeluser.FilePermissionPublic &&
-		permission != modeluser.FilePermissionFriends &&
-		permission != modeluser.FilePermissionFans &&
-		permission != modeluser.FilePermissionNone {
+	if permission != consts.FilePermissionPublic &&
+		permission != consts.FilePermissionFriends &&
+		permission != consts.FilePermissionFans &&
+		permission != consts.FilePermissionNone {
 		return resp.BadRequest(ctx)
 	}
 	fileName := UserFile.SanitizeFileName(fileHeader.Filename)
@@ -81,7 +80,7 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		FileSize:   uint64(fileHeader.Size),
 		Permission: permission,
 		Hash:       fileHash,
-		Status:     modeluser.FileStatusActive,
+		Status:     consts.FileStatusActive,
 	}
 
 	if reusedFile != nil && reusedFile.ID != 0 {

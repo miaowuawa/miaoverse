@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
+	"miaoverse/consts"
 )
 
 type Config struct {
@@ -40,12 +41,6 @@ type Servant struct {
 	tempLinkTTL         time.Duration
 }
 
-const (
-	defaultTempSignatureDuration = 10 * time.Minute
-	defaultTempLinkDuration      = 5 * time.Minute
-	maxTempLinkDuration          = 7 * 24 * time.Hour
-)
-
 func NewServant(ctx context.Context, conf Config) (*Servant, error) {
 	if strings.TrimSpace(conf.Region) == "" {
 		return nil, errors.New("s3 region is required")
@@ -61,7 +56,7 @@ func NewServant(ctx context.Context, conf Config) (*Servant, error) {
 	}
 	tempSignatureDuration, err := normalizeS3Duration(
 		conf.TempSignatureDuration,
-		defaultTempSignatureDuration,
+		consts.DefaultTempSignatureDuration,
 		"s3 temp signature duration",
 	)
 	if err != nil {
@@ -69,14 +64,14 @@ func NewServant(ctx context.Context, conf Config) (*Servant, error) {
 	}
 	tempLinkDuration, err := normalizeS3Duration(
 		conf.TempLinkDuration,
-		defaultTempLinkDuration,
+		consts.DefaultTempLinkDuration,
 		"s3 temp link duration",
 	)
 	if err != nil {
 		return nil, err
 	}
-	if tempLinkDuration > maxTempLinkDuration {
-		return nil, fmt.Errorf("s3 temp link duration must not exceed %s", maxTempLinkDuration)
+	if tempLinkDuration > consts.MaxTempLinkDuration {
+		return nil, fmt.Errorf("s3 temp link duration must not exceed %s", consts.MaxTempLinkDuration)
 	}
 
 	tempSignatureSecret := strings.TrimSpace(conf.TempSignatureSecret)

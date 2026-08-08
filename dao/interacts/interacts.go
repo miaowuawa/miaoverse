@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	modelinteracts "miaoverse/model/dao/interacts"
 	modelmoment "miaoverse/model/dao/moment"
 )
@@ -14,8 +15,8 @@ func (d *InteractsDAO) CreateInteract(i modelinteracts.Interacts) error {
 
 // FollowUser 关注用户（幂等：已存在正常关注时直接返回）。
 func (d *InteractsDAO) FollowUser(userFrom uint32, userTo uint32) error {
-	existing, err := d.QueryInteract(userFrom, uint64(userTo), modelinteracts.InteractTypeFollow)
-	if err == nil && existing != nil && existing.Status == modelinteracts.InteractStatusNormal {
+	existing, err := d.QueryInteract(userFrom, uint64(userTo), consts.InteractTypeFollow)
+	if err == nil && existing != nil && existing.Status == consts.InteractStatusNormal {
 		return nil
 	}
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -26,9 +27,9 @@ func (d *InteractsDAO) FollowUser(userFrom uint32, userTo uint32) error {
 		UserFrom:   userFrom,
 		UserTo:     userTo,
 		TargetID:   uint64(userTo),
-		Type:       modelinteracts.InteractTypeFollow,
-		TargetType: modelinteracts.InteractTargetUser,
-		Status:     modelinteracts.InteractStatusNormal,
+		Type:       consts.InteractTypeFollow,
+		TargetType: consts.InteractTargetUser,
+		Status:     consts.InteractStatusNormal,
 	}
 	return d.DB.Create(&interact).Error
 }
@@ -37,8 +38,8 @@ func (d *InteractsDAO) FollowUser(userFrom uint32, userTo uint32) error {
 func (d *InteractsDAO) UnfollowUser(userFrom uint32, userTo uint32) error {
 	return d.DB.Model(&modelinteracts.Interacts{}).
 		Where("user_from = ? AND user_to = ? AND type = ? AND status = ?",
-			userFrom, userTo, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
-		Update("status", modelinteracts.InteractStatusRevoked).Error
+			userFrom, userTo, consts.InteractTypeFollow, consts.InteractStatusNormal).
+		Update("status", consts.InteractStatusRevoked).Error
 }
 
 // LikeMomentAndMeta 点赞动态并原子自增动态点赞计数（事务，幂等）。
@@ -47,7 +48,7 @@ func (d *InteractsDAO) LikeMomentAndMeta(userID uint32, momentID uint64) error {
 		var count int64
 		if err := tx.Model(&modelinteracts.Interacts{}).
 			Where("user_from = ? AND target_id = ? AND type = ? AND target_type = ? AND status = ?",
-				userID, momentID, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
+				userID, momentID, consts.InteractTypeLike, consts.InteractTargetMoment, consts.InteractStatusNormal).
 			Count(&count).Error; err != nil {
 			return err
 		}
@@ -59,9 +60,9 @@ func (d *InteractsDAO) LikeMomentAndMeta(userID uint32, momentID uint64) error {
 			UserFrom:   userID,
 			UserTo:     0,
 			TargetID:   momentID,
-			Type:       modelinteracts.InteractTypeLike,
-			TargetType: modelinteracts.InteractTargetMoment,
-			Status:     modelinteracts.InteractStatusNormal,
+			Type:       consts.InteractTypeLike,
+			TargetType: consts.InteractTargetMoment,
+			Status:     consts.InteractStatusNormal,
 		}
 		if err := tx.Create(&interact).Error; err != nil {
 			return err
@@ -77,8 +78,8 @@ func (d *InteractsDAO) UnlikeMomentAndMeta(userID uint32, momentID uint64) error
 	return d.DB.Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&modelinteracts.Interacts{}).
 			Where("user_from = ? AND target_id = ? AND type = ? AND target_type = ? AND status = ?",
-				userID, momentID, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
-			Update("status", modelinteracts.InteractStatusRevoked)
+				userID, momentID, consts.InteractTypeLike, consts.InteractTargetMoment, consts.InteractStatusNormal).
+			Update("status", consts.InteractStatusRevoked)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -99,9 +100,9 @@ func (d *InteractsDAO) QueryInteract(userFrom uint32, targetID uint64, interactT
 }
 
 func (d *InteractsDAO) RevokeInteract(id uint64, forced bool) error {
-	status := modelinteracts.InteractStatusRevoked
+	status := consts.InteractStatusRevoked
 	if forced {
-		status = modelinteracts.InteractStatusForced
+		status = consts.InteractStatusForced
 	}
 	return d.DB.Model(&modelinteracts.Interacts{}).Where("id = ?", id).
 		Update("status", status).Error
@@ -110,7 +111,7 @@ func (d *InteractsDAO) RevokeInteract(id uint64, forced bool) error {
 func (d *InteractsDAO) CountInteracts(targetID uint64, interactType uint8) (int64, error) {
 	var count int64
 	err := d.DB.Model(&modelinteracts.Interacts{}).
-		Where("target_id = ? AND type = ? AND status = ?", targetID, interactType, modelinteracts.InteractStatusNormal).
+		Where("target_id = ? AND type = ? AND status = ?", targetID, interactType, consts.InteractStatusNormal).
 		Count(&count).Error
 	return count, err
 }
@@ -129,7 +130,7 @@ func (d *InteractsDAO) IsFollowing(userFrom uint32, userTo uint32) (bool, error)
 	var count int64
 	err := d.DB.Model(&modelinteracts.Interacts{}).
 		Where("user_from = ? AND user_to = ? AND type = ? AND status = ?",
-			userFrom, userTo, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+			userFrom, userTo, consts.InteractTypeFollow, consts.InteractStatusNormal).
 		Count(&count).Error
 	return count > 0, err
 }
@@ -139,7 +140,7 @@ func (d *InteractsDAO) CountFollowing(userID uint32) (int64, error) {
 	var count int64
 	err := d.DB.Model(&modelinteracts.Interacts{}).
 		Where("user_from = ? AND type = ? AND status = ?",
-			userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+			userID, consts.InteractTypeFollow, consts.InteractStatusNormal).
 		Count(&count).Error
 	return count, err
 }
@@ -149,7 +150,7 @@ func (d *InteractsDAO) CountFollowers(userID uint32) (int64, error) {
 	var count int64
 	err := d.DB.Model(&modelinteracts.Interacts{}).
 		Where("user_to = ? AND type = ? AND status = ?",
-			userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+			userID, consts.InteractTypeFollow, consts.InteractStatusNormal).
 		Count(&count).Error
 	return count, err
 }
@@ -158,7 +159,7 @@ func (d *InteractsDAO) CountFollowers(userID uint32) (int64, error) {
 func (d *InteractsDAO) QueryFollowingByUser(userID uint32, offset, limit int) ([]modelinteracts.Interacts, error) {
 	var list []modelinteracts.Interacts
 	err := d.DB.Where("user_from = ? AND type = ? AND status = ?",
-		userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		userID, consts.InteractTypeFollow, consts.InteractStatusNormal).
 		Order("id DESC").
 		Offset(offset).Limit(limit).
 		Find(&list).Error
@@ -169,7 +170,7 @@ func (d *InteractsDAO) QueryFollowingByUser(userID uint32, offset, limit int) ([
 func (d *InteractsDAO) QueryFollowersByUser(userID uint32, offset, limit int) ([]modelinteracts.Interacts, error) {
 	var list []modelinteracts.Interacts
 	err := d.DB.Where("user_to = ? AND type = ? AND status = ?",
-		userID, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		userID, consts.InteractTypeFollow, consts.InteractStatusNormal).
 		Order("id DESC").
 		Offset(offset).Limit(limit).
 		Find(&list).Error
@@ -181,7 +182,7 @@ func (d *InteractsDAO) CountMomentLikesReal(momentID uint64) (int64, error) {
 	var count int64
 	err := d.DB.Model(&modelinteracts.Interacts{}).
 		Where("target_id = ? AND type = ? AND target_type = ? AND status = ?",
-			momentID, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
+			momentID, consts.InteractTypeLike, consts.InteractTargetMoment, consts.InteractStatusNormal).
 		Count(&count).Error
 	return count, err
 }
@@ -200,7 +201,7 @@ func (d *InteractsDAO) CountMomentLikesBatch(momentIDs []uint64) (map[uint64]int
 	err := d.DB.Model(&modelinteracts.Interacts{}).
 		Select("target_id, COUNT(*) AS count").
 		Where("target_id IN ? AND type = ? AND target_type = ? AND status = ?",
-			momentIDs, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
+			momentIDs, consts.InteractTypeLike, consts.InteractTargetMoment, consts.InteractStatusNormal).
 		Group("target_id").
 		Scan(&rows).Error
 	if err != nil {

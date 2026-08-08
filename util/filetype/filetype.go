@@ -4,23 +4,23 @@ import (
 	"mime"
 	"strings"
 
-	modeluser "miaoverse/model/dao/user"
+	"miaoverse/consts"
 )
 
-// Normalize 将用户传入的分类或 MIME 类型归类为文件大类（uint8 常量，见 model/dao/user.FileType*）
+// Normalize 将用户传入的分类或 MIME 类型归类为文件大类（uint8 常量，见 consts.FileType*）
 func Normalize(value string, mimeType string) uint8 {
 	value = strings.ToLower(strings.TrimSpace(value))
 	switch value {
 	case "image":
-		return modeluser.FileTypeImage
+		return consts.FileTypeImage
 	case "video":
-		return modeluser.FileTypeVideo
+		return consts.FileTypeVideo
 	case "audio":
-		return modeluser.FileTypeAudio
+		return consts.FileTypeAudio
 	case "document":
-		return modeluser.FileTypeDocument
+		return consts.FileTypeDocument
 	case "other":
-		return modeluser.FileTypeOther
+		return consts.FileTypeOther
 	}
 
 	mediaType, _, err := mime.ParseMediaType(mimeType)
@@ -29,14 +29,14 @@ func Normalize(value string, mimeType string) uint8 {
 	}
 	switch {
 	case strings.HasPrefix(mediaType, "image/"):
-		return modeluser.FileTypeImage
+		return consts.FileTypeImage
 	case strings.HasPrefix(mediaType, "video/"):
-		return modeluser.FileTypeVideo
+		return consts.FileTypeVideo
 	case strings.HasPrefix(mediaType, "audio/"):
-		return modeluser.FileTypeAudio
+		return consts.FileTypeAudio
 	case mediaType == "application/pdf", strings.HasPrefix(mediaType, "text/"), strings.Contains(mediaType, "document"):
-		return modeluser.FileTypeDocument
+		return consts.FileTypeDocument
 	default:
-		return modeluser.FileTypeOther
+		return consts.FileTypeOther
 	}
 }

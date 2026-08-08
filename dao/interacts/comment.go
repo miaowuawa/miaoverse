@@ -2,6 +2,7 @@ package interacts
 
 import (
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	modelinteracts "miaoverse/model/dao/interacts"
 	modelmoment "miaoverse/model/dao/moment"
 )
@@ -30,7 +31,7 @@ func (d *InteractsDAO) QueryCommentsByTarget(targetID uint64, targetType uint8, 
 
 func (d *InteractsDAO) DeleteComment(id uint64) error {
 	return d.DB.Model(&modelinteracts.Comment{}).Where("id = ?", id).
-		Update("status", modelinteracts.CommentStatusDeleted).Error
+		Update("status", consts.CommentStatusDeleted).Error
 }
 
 // CreateCommentAndMeta 创建评论并原子自增动态评论计数（事务），同时写入互动记录（type=comment，target_type=moment）。
@@ -43,9 +44,9 @@ func (d *InteractsDAO) CreateCommentAndMeta(comment modelinteracts.Comment, mome
 			UserFrom:   comment.UserID,
 			UserTo:     momentAuthor,
 			TargetID:   momentID,
-			Type:       modelinteracts.InteractTypeComment,
-			TargetType: modelinteracts.InteractTargetMoment,
-			Status:     modelinteracts.InteractStatusNormal,
+			Type:       consts.InteractTypeComment,
+			TargetType: consts.InteractTargetMoment,
+			Status:     consts.InteractStatusNormal,
 		}
 		if err := tx.Create(&interact).Error; err != nil {
 			return err
@@ -101,9 +102,9 @@ ORDER BY id ASC`
 	var list []modelinteracts.Comment
 	err := d.DB.Raw(sql,
 		rootID,
-		modelinteracts.CommentStatusNormal,
-		modelinteracts.CommentTargetComment,
-		modelinteracts.CommentStatusNormal,
+		consts.CommentStatusNormal,
+		consts.CommentTargetComment,
+		consts.CommentStatusNormal,
 		maxDepth,
 		rootID,
 	).Scan(&list).Error
@@ -119,7 +120,7 @@ func (d *InteractsDAO) CountMomentCommentsReal(momentID uint64) (int64, error) {
 	var count int64
 	err := d.DB.Model(&modelinteracts.Comment{}).
 		Where("target_id = ? AND target_type = ? AND status = ?",
-			momentID, modelinteracts.CommentTargetMoment, modelinteracts.CommentStatusNormal).
+			momentID, consts.CommentTargetMoment, consts.CommentStatusNormal).
 		Count(&count).Error
 	return count, err
 }
@@ -138,7 +139,7 @@ func (d *InteractsDAO) CountMomentCommentsBatch(momentIDs []uint64) (map[uint64]
 	err := d.DB.Model(&modelinteracts.Comment{}).
 		Select("target_id, COUNT(*) AS count").
 		Where("target_id IN ? AND target_type = ? AND status = ?",
-			momentIDs, modelinteracts.CommentTargetMoment, modelinteracts.CommentStatusNormal).
+			momentIDs, consts.CommentTargetMoment, consts.CommentStatusNormal).
 		Group("target_id").
 		Scan(&rows).Error
 	if err != nil {

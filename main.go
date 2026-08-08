@@ -3,10 +3,9 @@ package main
 import (
 	"github.com/gofiber/fiber/v3"
 	"miaoverse/cmd"
+	"miaoverse/consts"
 	"miaoverse/service/ConfigService"
 )
-
-const multipartBodyOverhead = 1024 * 1024
 
 func main() {
 	err, conf := ConfigService.InitConfig("./")
@@ -14,7 +13,7 @@ func main() {
 		panic(err)
 	}
 	app := fiber.New(fiber.Config{
-		BodyLimit: int(conf.UploadMaxFileSizeBytes()) + multipartBodyOverhead,
+		BodyLimit: int(conf.UploadMaxFileSizeBytes()) + consts.MultipartBodyOverhead,
 	})
 	cmd.ServerStart(app, conf)
 }
