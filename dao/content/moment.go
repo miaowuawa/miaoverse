@@ -1,7 +1,10 @@
 package content
 
 import (
+	"time"
+
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"miaoverse/model/dao/moment"
 )
 
@@ -121,6 +124,20 @@ func (d *ContentDAO) QueryAllMomentIDs() ([]moment.Moment, error) {
 	return list, err
 }
 
+// QueryRecentMomentIDs 查询最近 N 分钟内更新过的动态 ID（用于增量校准）。
+// 动态本身、评论、点赞都会刷新 moment.updated_at 或 moment_meta.updated_at。
+func (d *ContentDAO) QueryRecentMomentIDs(since time.Time) ([]uint64, error) {
+	var ids []uint64
+	err := d.DB.Model(&moment.Moment{}).
+		Select("id").
+		Where("updated_at >= ?", since).
+		Pluck("id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // SetMomentMetaCounts 批量覆盖动态计数（用于定期校准，保证 metadata 与实际数量同步）
 func (d *ContentDAO) SetMomentMetaCounts(updates map[uint64]moment.MomentMetaData) error {
 	for momentID, meta := range updates {
@@ -134,4 +151,20 @@ func (d *ContentDAO) SetMomentMetaCounts(updates map[uint64]moment.MomentMetaDat
 		}
 	}
 	return nil
+}
+
+// UpsertMomentMetaCounts 批量覆盖动态计数（单条 SQL 批量 upsert，避免逐条 UPDATE）。
+func (d *ContentDAO) UpsertMomentMetaCounts(updates map[uint64]moment.MomentMetaData) error {
+	if len(updates) == 0 {
+		return nil
+	}
+
+	rows := make([]moment.MomentMetaData, 0, len(updates))
+	for _, meta := range updates {
+		rows = append(rows, meta)
+	}
+	return d.DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "moment_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"like_count", "comment_count"}),
+	}).Create(&rows).Error
 }

@@ -9,7 +9,15 @@ import (
 	"miaoverse/model/server"
 )
 
+const (
+	// reconcileWindow 增量校准窗口：只校准最近更新过的动态
+	reconcileWindow = 30 * time.Minute
+	// batchSize 每批处理的动态数量，避免单次 SQL 过大
+	batchSize = 500
+)
+
 // Start 启动动态计数定期校准任务，保证 moment_meta 与实际数量同步。
+// 采用增量校准：只重算最近 reconcileWindow 内有更新的动态，分批聚合统计后批量 upsert。
 // 定时任务由调用方（cmd 启动流程）负责关闭。
 func Start(ctx context.Context, servants *server.Servants, interval time.Duration) {
 	if servants == nil || servants.ContentServant == nil || servants.InteractsServant == nil {
@@ -36,32 +44,46 @@ func Start(ctx context.Context, servants *server.Servants, interval time.Duratio
 	}()
 }
 
-// ReconcileMomentMetas 全量校准所有动态的点赞数/评论数（覆盖式写入，幂等）。
+// ReconcileMomentMetas 增量校准动态计数。
+// 只处理最近 reconcileWindow 内更新过的动态，按 batchSize 分批：
+// 每批用 2 条 GROUP BY 聚合查询拿到真实点赞/评论数，再单条 SQL 批量 upsert。
 func ReconcileMomentMetas(ctx context.Context, servants *server.Servants) error {
-	moments, err := servants.ContentServant.QueryAllMomentIDs()
+	since := time.Now().Add(-reconcileWindow)
+	ids, err := servants.ContentServant.QueryRecentMomentIDs(since)
 	if err != nil {
 		return err
 	}
-	if len(moments) == 0 {
+	if len(ids) == 0 {
 		return nil
 	}
 
-	updates := make(map[uint64]modelmoment.MomentMetaData, len(moments))
-	for _, m := range moments {
-		likes, err := servants.InteractsServant.CountMomentLikesReal(m.ID)
+	for start := 0; start < len(ids); start += batchSize {
+		end := start + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunk := ids[start:end]
+
+		likes, err := servants.InteractsServant.CountMomentLikesBatch(chunk)
 		if err != nil {
 			return err
 		}
-		comments, err := servants.InteractsServant.CountMomentCommentsReal(m.ID)
+		comments, err := servants.InteractsServant.CountMomentCommentsBatch(chunk)
 		if err != nil {
 			return err
 		}
-		updates[m.ID] = modelmoment.MomentMetaData{
-			MomentID:     m.ID,
-			LikeCount:    uint32(likes),
-			CommentCount: uint32(comments),
+
+		updates := make(map[uint64]modelmoment.MomentMetaData, len(chunk))
+		for _, id := range chunk {
+			updates[id] = modelmoment.MomentMetaData{
+				MomentID:     id,
+				LikeCount:    uint32(likes[id]),
+				CommentCount: uint32(comments[id]),
+			}
+		}
+		if err := servants.ContentServant.UpsertMomentMetaCounts(updates); err != nil {
+			return err
 		}
 	}
-
-	return servants.ContentServant.SetMomentMetaCounts(updates)
+	return nil
 }

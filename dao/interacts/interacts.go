@@ -1,11 +1,94 @@
 package interacts
 
 import (
+	"errors"
+
+	"gorm.io/gorm"
 	modelinteracts "miaoverse/model/dao/interacts"
+	modelmoment "miaoverse/model/dao/moment"
 )
 
 func (d *InteractsDAO) CreateInteract(i modelinteracts.Interacts) error {
 	return d.DB.Create(&i).Error
+}
+
+// FollowUser 关注用户（幂等：已存在正常关注时直接返回）。
+func (d *InteractsDAO) FollowUser(userFrom uint32, userTo uint32) error {
+	existing, err := d.QueryInteract(userFrom, uint64(userTo), modelinteracts.InteractTypeFollow)
+	if err == nil && existing != nil && existing.Status == modelinteracts.InteractStatusNormal {
+		return nil
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	interact := modelinteracts.Interacts{
+		UserFrom:   userFrom,
+		UserTo:     userTo,
+		TargetID:   uint64(userTo),
+		Type:       modelinteracts.InteractTypeFollow,
+		TargetType: modelinteracts.InteractTargetUser,
+		Status:     modelinteracts.InteractStatusNormal,
+	}
+	return d.DB.Create(&interact).Error
+}
+
+// UnfollowUser 取消关注（软撤销：将正常关注置为已撤销）。
+func (d *InteractsDAO) UnfollowUser(userFrom uint32, userTo uint32) error {
+	return d.DB.Model(&modelinteracts.Interacts{}).
+		Where("user_from = ? AND user_to = ? AND type = ? AND status = ?",
+			userFrom, userTo, modelinteracts.InteractTypeFollow, modelinteracts.InteractStatusNormal).
+		Update("status", modelinteracts.InteractStatusRevoked).Error
+}
+
+// LikeMomentAndMeta 点赞动态并原子自增动态点赞计数（事务，幂等）。
+func (d *InteractsDAO) LikeMomentAndMeta(userID uint32, momentID uint64) error {
+	return d.DB.Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&modelinteracts.Interacts{}).
+			Where("user_from = ? AND target_id = ? AND type = ? AND target_type = ? AND status = ?",
+				userID, momentID, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return nil
+		}
+
+		interact := modelinteracts.Interacts{
+			UserFrom:   userID,
+			UserTo:     0,
+			TargetID:   momentID,
+			Type:       modelinteracts.InteractTypeLike,
+			TargetType: modelinteracts.InteractTargetMoment,
+			Status:     modelinteracts.InteractStatusNormal,
+		}
+		if err := tx.Create(&interact).Error; err != nil {
+			return err
+		}
+		return tx.Model(&modelmoment.MomentMetaData{}).
+			Where("moment_id = ?", momentID).
+			UpdateColumn("like_count", gorm.Expr("like_count + ?", 1)).Error
+	})
+}
+
+// UnlikeMomentAndMeta 取消点赞并原子自减动态点赞计数（事务，幂等）。
+func (d *InteractsDAO) UnlikeMomentAndMeta(userID uint32, momentID uint64) error {
+	return d.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&modelinteracts.Interacts{}).
+			Where("user_from = ? AND target_id = ? AND type = ? AND target_type = ? AND status = ?",
+				userID, momentID, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
+			Update("status", modelinteracts.InteractStatusRevoked)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		return tx.Model(&modelmoment.MomentMetaData{}).
+			Where("moment_id = ?", momentID).
+			UpdateColumn("like_count", gorm.Expr("like_count - ?", 1)).Error
+	})
 }
 
 func (d *InteractsDAO) QueryInteract(userFrom uint32, targetID uint64, interactType uint8) (*modelinteracts.Interacts, error) {
@@ -101,4 +184,30 @@ func (d *InteractsDAO) CountMomentLikesReal(momentID uint64) (int64, error) {
 			momentID, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
 		Count(&count).Error
 	return count, err
+}
+
+// CountMomentLikesBatch 批量统计多个动态的实际点赞数（一次 GROUP BY 查询）。
+func (d *InteractsDAO) CountMomentLikesBatch(momentIDs []uint64) (map[uint64]int64, error) {
+	result := map[uint64]int64{}
+	if len(momentIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []struct {
+		TargetID uint64
+		Count    int64
+	}
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Select("target_id, COUNT(*) AS count").
+		Where("target_id IN ? AND type = ? AND target_type = ? AND status = ?",
+			momentIDs, modelinteracts.InteractTypeLike, modelinteracts.InteractTargetMoment, modelinteracts.InteractStatusNormal).
+		Group("target_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.TargetID] = row.Count
+	}
+	return result, nil
 }

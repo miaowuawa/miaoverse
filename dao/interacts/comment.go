@@ -59,3 +59,29 @@ func (d *InteractsDAO) CountMomentCommentsReal(momentID uint64) (int64, error) {
 		Count(&count).Error
 	return count, err
 }
+
+// CountMomentCommentsBatch 批量统计多个动态的实际评论数（一次 GROUP BY 查询）。
+func (d *InteractsDAO) CountMomentCommentsBatch(momentIDs []uint64) (map[uint64]int64, error) {
+	result := map[uint64]int64{}
+	if len(momentIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []struct {
+		TargetID uint64
+		Count    int64
+	}
+	err := d.DB.Model(&modelinteracts.Comment{}).
+		Select("target_id, COUNT(*) AS count").
+		Where("target_id IN ? AND target_type = ? AND status = ?",
+			momentIDs, modelinteracts.CommentTargetMoment, modelinteracts.CommentStatusNormal).
+		Group("target_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.TargetID] = row.Count
+	}
+	return result, nil
+}
