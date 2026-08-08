@@ -2,8 +2,6 @@ package content
 
 import (
 	"errors"
-	"strconv"
-	"strings"
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -12,11 +10,7 @@ import (
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
 	"miaoverse/service/UserMoment"
-)
-
-const (
-	defaultListLimit = 20
-	maxListLimit     = 100
+	"miaoverse/util/pagination"
 )
 
 func CountHandler(ctx fiber.Ctx, servants *server.Servants) error {
@@ -83,23 +77,7 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 }
 
 func parsePagination(ctx fiber.Ctx) (int, int, bool) {
-	offset := 0
-	limit := defaultListLimit
-	if raw := strings.TrimSpace(ctx.Query("offset")); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil || value < 0 {
-			return 0, 0, false
-		}
-		offset = value
-	}
-	if raw := strings.TrimSpace(ctx.Query("limit")); raw != "" {
-		value, err := strconv.Atoi(raw)
-		if err != nil || value <= 0 || value > maxListLimit {
-			return 0, 0, false
-		}
-		limit = value
-	}
-	return offset, limit, true
+	return pagination.Parse(ctx.Query("offset"), ctx.Query("limit"))
 }
 
 // relationFlags 计算查看者与目标用户的关系：isFriend 互相关注，isFan 目标关注了查看者

@@ -73,18 +73,34 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	userGroup.Post("/moments", middleware.RequireNotPunished(servants, modeluser.PermPost), func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
 	})
-	userGroup.Post("/comments", middleware.RequireNotPunished(servants, modeluser.PermComment),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),
+	// 评论动态。接口按内容类型（moments/...）划分，后续文章等类型使用各自的子路径。
+	userGroup.Post("/moments/comments", middleware.RequireNotPunished(servants, modeluser.PermComment),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return usercomment.CreateHandler(c, servants)
+		})
+	// 回复动态下的评论（楼中楼）：先校验与动态作者的拉黑关系，再校验与被回复评论作者的拉黑关系。
+	userGroup.Post("/moments/comments/:id/replies", middleware.RequireNotPunished(servants, modeluser.PermComment),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor, AllowSelf: true}),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return usercomment.ReplyHandler(c, servants)
+		})
+	// 获取楼中楼完整对话（传入楼中楼首条评论 id）。
+	userGroup.Get("/moments/comments/:id/conversation",
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor, AllowSelf: true}),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return usercomment.ConversationHandler(c, servants)
 		})
 	userGroup.Post("/follows", middleware.RequireNotPunished(servants, modeluser.PermSocial),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{BodyField: "target", CheckMuteUnwatch: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.FollowHandler(c, servants)
 		})
-	userGroup.Post("/likes", middleware.RequireNotPunished(servants, modeluser.PermSocial),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),
+	// 给动态点赞。接口按内容类型（moments/...）划分。
+	userGroup.Post("/moments/likes", middleware.RequireNotPunished(servants, modeluser.PermSocial),
+		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.LikeHandler(c, servants)
 		})

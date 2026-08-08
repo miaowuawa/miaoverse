@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	modelinteracts "miaoverse/model/dao/interacts"
 	modelmoment "miaoverse/model/dao/moment"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
@@ -14,8 +15,11 @@ import (
 )
 
 const (
-	blockTargetLocalKey = "miaoverse.block.target"
-	blockMomentLocalKey = "miaoverse.block.moment"
+	blockTargetLocalKey  = "miaoverse.block.target"
+	blockMomentLocalKey  = "miaoverse.block.moment"
+	blockCommentLocalKey = "miaoverse.block.comment"
+	blockCommentRootKey  = "miaoverse.block.comment.root"
+	commentChainMaxDepth = 20 // 楼中楼评论链上溯最大深度，防止脏数据导致死循环
 )
 
 var errBlockTargetMissing = errors.New("block target is missing")
@@ -31,6 +35,7 @@ type BlockGuardConfig struct {
 	BodyField        string
 	Resolver         BlockTargetResolver
 	CheckMuteUnwatch bool // 额外校验目标被自己屏蔽/不想看（关注场景）
+	AllowSelf        bool // 允许目标为自己（如回复自己的评论、评论自己的动态）
 }
 
 // RequireNoBlock 拉黑校验中间件：查看者与目标用户存在任意一方拉黑关系时拒绝（40301）。
@@ -46,7 +51,7 @@ func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Ha
 		if err != nil {
 			return resp.BadRequest(ctx)
 		}
-		if targetID == 0 || targetID == uid {
+		if targetID == 0 || (!config.AllowSelf && targetID == uid) {
 			return resp.BadRequest(ctx)
 		}
 
@@ -91,6 +96,22 @@ func BlockMoment(ctx fiber.Ctx) (*modelmoment.Moment, bool) {
 	return nil, false
 }
 
+// BlockComment 读取 RequireNoBlock 的 Resolver 存入的被回复评论对象（回复评论/楼中楼对话场景）。
+func BlockComment(ctx fiber.Ctx) (*modelinteracts.Comment, bool) {
+	if c, ok := ctx.Locals(blockCommentLocalKey).(*modelinteracts.Comment); ok && c != nil {
+		return c, true
+	}
+	return nil, false
+}
+
+// BlockCommentRoot 读取 RequireNoBlock 的 Resolver 存入的楼中楼首条评论对象（用于互动记录 reference_id）。
+func BlockCommentRoot(ctx fiber.Ctx) (*modelinteracts.Comment, bool) {
+	if c, ok := ctx.Locals(blockCommentRootKey).(*modelinteracts.Comment); ok && c != nil {
+		return c, true
+	}
+	return nil, false
+}
+
 // ResolveMomentAuthor 点赞/评论场景的目标解析器：按 body 中 moment_id 查动态，返回作者 ID 并缓存动态对象。
 func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
 	var body struct {
@@ -110,6 +131,76 @@ func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, erro
 
 	ctx.Locals(blockMomentLocalKey, moment)
 	return moment.UserID, nil
+}
+
+// ResolveCommentAuthor 回复评论/楼中楼对话场景的目标解析器：按路径参数 :id 查评论，返回评论作者 ID 并缓存评论对象。
+func ResolveCommentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
+	comment, err := loadCommentByPathID(ctx, servants)
+	if err != nil {
+		return 0, err
+	}
+	return comment.UserID, nil
+}
+
+// ResolveCommentMomentAuthor 回复评论/楼中楼对话场景的目标解析器：按路径参数 :id 查评论，
+// 沿 target 链上溯到所属动态，返回动态作者 ID，并缓存被回复评论、楼中楼首条评论与动态对象。
+func ResolveCommentMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
+	comment, err := loadCommentByPathID(ctx, servants)
+	if err != nil {
+		return 0, err
+	}
+
+	root, moment, err := resolveCommentRoot(comment, servants)
+	if err != nil {
+		return 0, err
+	}
+	ctx.Locals(blockCommentRootKey, root)
+	ctx.Locals(blockMomentLocalKey, moment)
+	return moment.UserID, nil
+}
+
+// loadCommentByPathID 从路径参数 :id 解析评论，校验存在且状态正常，并缓存评论对象。
+// 已缓存时直接复用（RequireNoBlock 可叠加多个 Resolver 时避免重复查询）。
+func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelinteracts.Comment, error) {
+	if comment, ok := BlockComment(ctx); ok {
+		return comment, nil
+	}
+
+	id, err := strconv.ParseUint(strings.TrimSpace(ctx.Params("id")), 10, 64)
+	if err != nil || id == 0 {
+		return nil, errBlockTargetMissing
+	}
+	comment, err := servants.InteractsServant.QueryCommentByID(id)
+	if err != nil || comment.Status != modelinteracts.CommentStatusNormal {
+		return nil, errBlockTargetMissing
+	}
+
+	ctx.Locals(blockCommentLocalKey, comment)
+	return comment, nil
+}
+
+// resolveCommentRoot 沿评论 target 链上溯：找到楼中楼首条评论与所属动态。
+// 评论本身 target_type=moment 时，该评论即首条评论。
+func resolveCommentRoot(comment *modelinteracts.Comment, servants *server.Servants) (*modelinteracts.Comment, *modelmoment.Moment, error) {
+	root := comment
+	for depth := 0; depth < commentChainMaxDepth; depth++ {
+		if root.TargetType == modelinteracts.CommentTargetMoment {
+			moment, err := servants.ContentServant.QueryMomentByID(root.TargetID)
+			if err != nil || moment.Status != modelmoment.MomentStatusNormal {
+				return nil, nil, errBlockTargetMissing
+			}
+			return root, moment, nil
+		}
+		if root.TargetType != modelinteracts.CommentTargetComment {
+			return nil, nil, errBlockTargetMissing
+		}
+		parent, err := servants.InteractsServant.QueryCommentByID(root.TargetID)
+		if err != nil || parent.Status != modelinteracts.CommentStatusNormal {
+			return nil, nil, errBlockTargetMissing
+		}
+		root = parent
+	}
+	return nil, nil, errBlockTargetMissing
 }
 
 func resolveBlockTarget(ctx fiber.Ctx, servants *server.Servants, config BlockGuardConfig) (uint32, error) {

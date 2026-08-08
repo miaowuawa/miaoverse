@@ -703,10 +703,10 @@ curl -i -X POST http://localhost:3000/api/v1/user/moments \
 #### 请求示例
 
 ```bash
-curl -i -X POST http://localhost:3000/api/v1/user/blocks \
+curl -i -X POST http://localhost:3000/api/v1/user/moments/likes \
   -H "Content-Type: application/json" \
   -b cookie.txt \
-  -d '{"target":20002,"type":1,"action":"add"}'
+  -d '{"moment_id":1}'
 ```
 
 #### 成功响应
@@ -890,9 +890,11 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
 
 ## 评论动态
 
-### `POST /api/v1/user/comments`
+### `POST /api/v1/user/moments/comments`
 
-给动态发送评论。会写入 `comment` 表并原子自增 `moment_meta.comment_count`。被拉黑/拉黑对方、评论权限不允许、或被封禁评论权限时拒绝。
+给动态发送评论。会写入 `comment` 表和 `interacts` 表（type=103 对内容评论），并原子自增 `moment_meta.comment_count`。被拉黑/拉黑对方、评论权限不允许、或被封禁评论权限时拒绝。
+
+> 接口按内容类型划分：评论动态挂在 `/moments/` 下。后续文章等类型使用各自的子路径（如 `/articles/comments`），不再使用通用的 `/comments`。
 
 #### 请求头
 
@@ -952,6 +954,149 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
 | `403` | 评论权限封禁（`code` 为 `40302`）；拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`） |
 | `404` | 动态不存在或已删除 |
 | `500` | 数据库异常 |
+
+## 回复评论（楼中楼）
+
+### `POST /api/v1/user/moments/comments/:id/replies`
+
+回复动态下的某条评论（楼中楼）。回复同样写入 `comment` 表（`target_type=2`，`target_id` 为被回复的评论 id），并在 `interacts` 表写入 `type=104 回复评论` 记录（`user_to` 为被回复评论作者，`reference_id` 为楼中楼首条评论 id）。
+
+规则：
+
+- 需要登录且账号状态正常。
+- 评论权限封禁（`PermComment`）期间不可回复，返回 `40302`。
+- 与动态作者或被回复评论作者存在任意一方拉黑关系时不可回复，返回 `40301`。
+- 评论权限按所属动态的 `comment_permission` 校验（与评论动态一致）。
+- 楼中楼回复不计入 `moment_meta.comment_count`（该计数只统计一级评论），完整回复列表通过对话接口获取。
+- 支持回复自己的评论、回复自己动态下的评论。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "content": "同意"
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+| --- | --- | --- | --- | --- |
+| `content` | string | 是 | 非空，最长 1000 字符 | 回复内容 |
+
+#### 成功响应
+
+状态码：`201 Created`
+
+```json
+{
+  "code": 201,
+  "msg": "回复成功",
+  "reply": {
+    "id": 2,
+    "user_id": 10002,
+    "moment_id": 1,
+    "reply_to_id": 1,
+    "reply_to_user_id": 10001,
+    "content": "同意",
+    "status": 0,
+    "created_at": "2026-06-07 12:01:00"
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `reply_to_id` | number | 被回复的评论 id |
+| `reply_to_user_id` | number | 被回复的评论作者 id |
+| `moment_id` | number | 所属动态 id |
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、`content` 为空或超长、`:id` 非法或评论不存在/已删除 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 评论权限封禁（`code` 为 `40302`）；与动态作者或被回复评论作者存在拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`） |
+| `500` | 数据库异常 |
+
+## 获取楼中楼完整对话
+
+### `GET /api/v1/user/moments/comments/:id/conversation`
+
+传入楼中楼首条评论 id，返回该评论（`root`）及其全部子孙回复（`replies`，扁平列表按时间正序）。`count` 为该楼的全部回复总数。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `offset` | number | 否 | 回复列表偏移量，默认 `0` |
+| `limit` | number | 否 | 每页回复数量，默认 `20`，最大 `100` |
+
+#### 请求示例
+
+```bash
+curl -i "http://localhost:3000/api/v1/user/moments/comments/1/conversation?offset=0&limit=20" \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "conversation": {
+    "root": {
+      "id": 1,
+      "user_id": 10001,
+      "moment_id": 1,
+      "content": "写得好",
+      "status": 0,
+      "created_at": "2026-06-07 12:00:00"
+    },
+    "count": 2,
+    "replies": [
+      {
+        "id": 2,
+        "user_id": 10002,
+        "moment_id": 1,
+        "reply_to_id": 1,
+        "reply_to_user_id": 10001,
+        "content": "同意",
+        "status": 0,
+        "created_at": "2026-06-07 12:01:00"
+      }
+    ]
+  }
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `:id` 非法或评论不存在/已删除、`offset`/`limit` 取值非法 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 与动态作者或首条评论作者存在拉黑/被拉黑关系，body 中 `code` 为 `40301` |
+| `500` | 数据库查询异常 |
 
 ## 查询本人惩罚记录
 
@@ -1131,9 +1276,11 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
 
 ## 给动态点赞
 
-### `POST /api/v1/user/likes`
+### `POST /api/v1/user/moments/likes`
 
 给动态点赞。被拉黑/拉黑对方不能点赞。点赞会同步自增动态的点赞计数。
+
+> 接口按内容类型划分：点赞动态挂在 `/moments/` 下。后续文章等类型使用各自的子路径（如 `/articles/likes`），不再使用通用的 `/likes`。
 
 #### 请求头
 

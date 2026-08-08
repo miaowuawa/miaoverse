@@ -153,6 +153,22 @@ func CommentCreated(ctx fiber.Ctx, comment CommentInfo) error {
 	})
 }
 
+func ReplyCreated(ctx fiber.Ctx, reply ReplyInfo) error {
+	return ctx.Status(fiber.StatusCreated).JSON(CodeWithMsgReply{
+		Code:  fiber.StatusCreated,
+		Msg:   i18n.Message(ctx, i18n.OKReplyCreated),
+		Reply: reply,
+	})
+}
+
+func Conversation(ctx fiber.Ctx, conversation ConversationInfo) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgConversation{
+		Code:         fiber.StatusOK,
+		Msg:          i18n.Message(ctx, i18n.OKConversationFetched),
+		Conversation: conversation,
+	})
+}
+
 func RelationList(ctx fiber.Ctx, count int64, users []RelationUser) error {
 	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgRelationList{
 		Code:  fiber.StatusOK,

@@ -72,6 +72,35 @@ userGroup.Post(
 - `service/UserCheck` 只做检查，返回 `Result`。
 - `middleware.RequireUser` 负责返回信息、状态码和 JSON 响应。
 
+## 拉黑校验中间件
+
+```go
+middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{...})
+```
+
+用于校验当前登录用户与目标用户之间不存在任意一方的拉黑关系（拉黑或被拉黑均拒绝，body `code` 为 `40301`）。
+
+目标用户 ID 的解析方式（三选一）：
+
+| 配置字段 | 说明 |
+| --- | --- |
+| `PathParam` | 从路径参数解析，如 `/users/:uid/...` |
+| `BodyField` | 从请求体字段解析，如 `target` |
+| `Resolver` | 自定义解析器，支持先查业务对象再取作者（如点赞/评论/回复场景） |
+
+其他配置：
+
+- `CheckMuteUnwatch`：额外校验目标被自己屏蔽/不想看（关注场景）。
+- `AllowSelf`：允许目标为自己（如回复自己的评论、评论自己的动态）；默认 `false`。
+
+内置 Resolver：
+
+- `ResolveMomentAuthor`：按 body 中 `moment_id` 查动态，返回作者 ID 并缓存动态对象（`BlockMoment`）。
+- `ResolveCommentAuthor`：按路径参数 `:id` 查评论，返回评论作者 ID 并缓存评论对象（`BlockComment`）。用于「禁止回复拉黑/被拉黑的人的评论」。
+- `ResolveCommentMomentAuthor`：按路径参数 `:id` 查评论，沿 target 链上溯到所属动态，返回动态作者 ID，并缓存被回复评论、楼中楼首条评论（`BlockCommentRoot`）与动态对象（`BlockMoment`）。用于回复评论/楼中楼对话场景。
+
+多个 `RequireNoBlock` 可叠加，例如回复评论先校验与动态作者的拉黑关系，再校验与被回复评论作者的拉黑关系。
+
 ## Referer 检测中间件
 
 ```go

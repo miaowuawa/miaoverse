@@ -60,6 +60,8 @@ const (
 	OKContentList          MessageKey = "ok.content_list"
 	OKUserInfoFetched      MessageKey = "ok.user_info_fetched"
 	OKCommentCreated       MessageKey = "ok.comment_created"
+	OKReplyCreated         MessageKey = "ok.reply_created"
+	OKConversationFetched  MessageKey = "ok.conversation_fetched"
 	OKPunishmentsFetched   MessageKey = "ok.punishments_fetched"
 	OKRelationList         MessageKey = "ok.relation_list"
 	OKInteract             MessageKey = "ok.interact"
@@ -413,6 +415,8 @@ func resetCatalog() {
 			OKContentList:          {Other: "获取成功"},
 			OKUserInfoFetched:      {Other: "获取成功"},
 			OKCommentCreated:       {Other: "评论成功"},
+			OKReplyCreated:         {Other: "回复成功"},
+			OKConversationFetched:  {Other: "获取成功"},
 			OKPunishmentsFetched:   {Other: "获取成功"},
 			OKRelationList:         {Other: "获取成功"},
 			OKInteract:             {Other: "操作成功"},

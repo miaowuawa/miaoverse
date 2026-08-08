@@ -33,10 +33,21 @@ func (d *InteractsDAO) DeleteComment(id uint64) error {
 		Update("status", modelinteracts.CommentStatusDeleted).Error
 }
 
-// CreateCommentAndMeta 创建评论并原子自增动态评论计数（事务）。
-func (d *InteractsDAO) CreateCommentAndMeta(comment modelinteracts.Comment, momentID uint64) (*modelinteracts.Comment, error) {
+// CreateCommentAndMeta 创建评论并原子自增动态评论计数（事务），同时写入互动记录（type=comment，target_type=moment）。
+func (d *InteractsDAO) CreateCommentAndMeta(comment modelinteracts.Comment, momentID uint64, momentAuthor uint32) (*modelinteracts.Comment, error) {
 	err := d.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&comment).Error; err != nil {
+			return err
+		}
+		interact := modelinteracts.Interacts{
+			UserFrom:   comment.UserID,
+			UserTo:     momentAuthor,
+			TargetID:   momentID,
+			Type:       modelinteracts.InteractTypeComment,
+			TargetType: modelinteracts.InteractTargetMoment,
+			Status:     modelinteracts.InteractStatusNormal,
+		}
+		if err := tx.Create(&interact).Error; err != nil {
 			return err
 		}
 		return tx.Model(&modelmoment.MomentMetaData{}).
@@ -47,6 +58,47 @@ func (d *InteractsDAO) CreateCommentAndMeta(comment modelinteracts.Comment, mome
 		return nil, err
 	}
 	return &comment, nil
+}
+
+// CreateReplyCommentAndInteract 创建楼中楼回复并写入互动记录（事务，原子性）。
+// 互动记录：type=reply，target_type=comment，user_to=被回复评论作者，reference_id=楼中楼首条评论 id。
+// 楼中楼回复不计入 moment_meta.comment_count（该计数只统计 target_type=moment 的一级评论，见 CountMomentCommentsReal）。
+func (d *InteractsDAO) CreateReplyCommentAndInteract(comment modelinteracts.Comment, interact modelinteracts.Interacts) (*modelinteracts.Comment, error) {
+	err := d.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&comment).Error; err != nil {
+			return err
+		}
+		return tx.Create(&interact).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &comment, nil
+}
+
+// QueryCommentRepliesByRoot 查询楼中楼完整回复列表：以 rootID 为根，按 target 链逐层收集全部子孙回复。
+// 返回按 id 升序的扁平列表（仅 status=normal），maxDepth 限制最大嵌套层数。
+func (d *InteractsDAO) QueryCommentRepliesByRoot(rootID uint64, maxDepth int) ([]modelinteracts.Comment, error) {
+	var all []modelinteracts.Comment
+	ids := []uint64{rootID}
+	for depth := 0; depth < maxDepth; depth++ {
+		var level []modelinteracts.Comment
+		if err := d.DB.Where("target_id IN ? AND target_type = ? AND status = ?",
+			ids, modelinteracts.CommentTargetComment, modelinteracts.CommentStatusNormal).
+			Order("id ASC").
+			Find(&level).Error; err != nil {
+			return nil, err
+		}
+		if len(level) == 0 {
+			break
+		}
+		all = append(all, level...)
+		ids = ids[:0]
+		for i := range level {
+			ids = append(ids, level[i].ID)
+		}
+	}
+	return all, nil
 }
 
 // CountMomentCommentsReal 统计动态实际评论数（target_type=moment, status=normal）。
