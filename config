@@ -19,6 +19,19 @@ redis:
   username:
   password:
 
+mongo:
+  enabled: false
+  host:
+  port:
+  username:
+  password:
+  auth_source:
+  db_name:
+  max_pool_size:
+  min_pool_size:
+  connect_timeout_seconds:
+  server_selection_timeout_seconds:
+
 session:
   dbnum:
 

@@ -2,6 +2,19 @@
 
 ## 用户api部分
 
+## 路由分组
+
+接口按业务域分组，统一挂在 `/api/v1` 下：
+
+| 分组 | 前缀 | 是否需要登录 | 内容 |
+| --- | --- | --- | --- |
+| 认证 | `/api/v1/auth` | 否 | 短信验证码、登录、注册 |
+| 动态 | `/api/v1/moment` | 是 | 发布动态、给动态点赞 |
+| 评论 | `/api/v1/comment` | 是 | 评论动态、回复评论（楼中楼）、获取楼中楼对话。按被评论内容类型划分子路径（`/comment/moments`，后续文章为 `/comment/articles`） |
+| 用户 | `/api/v1/user` | 是 | 资料、文件、关注、拉黑/屏蔽/不想看、惩罚记录、查看他人资料/内容/关系 |
+
+除认证组外，其余分组接口均要求登录（`mwu_sess_id` cookie）且账号状态正常；被权限封禁的账号按各接口说明返回 `40302`。
+
 ## 通用约定
 
 - 基础地址：`http://{host}:{port}`
@@ -73,7 +86,7 @@ Miaoverse API Resp at 2026-06-01 12:00:00
 
 ## 发送短信验证码
 
-### `POST /api/v1/sms/send`
+### `POST /api/v1/auth/sms/send`
 
 向指定手机号发送短信验证码。验证码有效期在代码中按 `5 分钟` 发送给短信服务，实际校验依赖 Redis 中验证码的过期时间配置。
 
@@ -104,7 +117,7 @@ Miaoverse API Resp at 2026-06-01 12:00:00
 #### 请求示例
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/sms/send \
+curl -X POST http://localhost:3000/api/v1/auth/sms/send \
   -H "Content-Type: application/json" \
   -d '{"phone":"13800138000","region":"86","a":"'"$(node -e 'const ts=BigInt(Date.now());process.stdout.write((ts*ts).toString().split("").reverse().join(""))')"'" }'
 ```
@@ -136,7 +149,7 @@ curl -X POST http://localhost:3000/api/v1/sms/send \
 
 ## 短信验证码登录
 
-### `POST /api/v1/user/login/sms`
+### `POST /api/v1/auth/login/sms`
 
 使用手机号、验证码 UUID 和验证码登录。若手机号没有账号，会自动创建第一个账号并登录。若手机号绑定多个账号，会返回账号列表并进入待选择账号状态。
 
@@ -164,14 +177,14 @@ curl -X POST http://localhost:3000/api/v1/sms/send \
 | --- | --- | --- | --- | --- |
 | `phone` | string | 是 | 只能包含数字 | 手机号 |
 | `region` | number | 是 | 数字 | 手机区号，例如 `86` |
-| `uuid` | string | 是 | UUID v4，小写十六进制格式 | `/sms/send` 返回的 `code_uuid` |
+| `uuid` | string | 是 | UUID v4，小写十六进制格式 | `/auth/sms/send` 返回的 `code_uuid` |
 | `code` | number | 是 | 数字 | 用户收到的 4 位短信验证码 |
 | `a` | string | 是 | 只能包含数字，且时间校验通过 | 见上方 `a` 参数生成规则 |
 
 #### 请求示例
 
 ```bash
-curl -i -X POST http://localhost:3000/api/v1/user/login/sms \
+curl -i -X POST http://localhost:3000/api/v1/auth/login/sms \
   -H "Content-Type: application/json" \
   -c cookie.txt \
   -d '{
@@ -237,7 +250,7 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/sms \
 
 - 单账号登录或自动注册成功时，session 中会写入 `Phone`、`Region`、`UID`。
 - 多账号待选择时，session 中会写入 `PendingLoginPhone`、`PendingLoginRegion`，并清理 `UID`。
-- 后续调用 `/api/v1/user/login/choose` 时必须携带同一个 `mwu_sess_id` cookie。
+- 后续调用 `/api/v1/auth/login/choose` 时必须携带同一个 `mwu_sess_id` cookie。
 
 #### 可能的错误
 
@@ -249,9 +262,9 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/sms \
 
 ## 选择登录账号
 
-### `POST /api/v1/user/login/choose`
+### `POST /api/v1/auth/login/choose`
 
-当 `/api/v1/user/login/sms` 返回 `300 Multiple Choices` 时，调用该接口选择具体账号完成登录。
+当 `/api/v1/auth/login/sms` 返回 `300 Multiple Choices` 时，调用该接口选择具体账号完成登录。
 
 #### 请求头
 
@@ -277,7 +290,7 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/sms \
 #### 请求示例
 
 ```bash
-curl -i -X POST http://localhost:3000/api/v1/user/login/choose \
+curl -i -X POST http://localhost:3000/api/v1/auth/login/choose \
   -H "Content-Type: application/json" \
   -b cookie.txt \
   -c cookie.txt \
@@ -310,7 +323,7 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/choose \
 
 ## 为手机号注册新账号
 
-### `POST /api/v1/user/register/sms`
+### `POST /api/v1/auth/register/sms`
 
 使用短信验证码为已有手机号注册一个新账号，并立即登录。代码逻辑要求该手机号已经至少存在一个账号；如果没有账号，会返回 `404`，提示应先使用短信登录自动创建首个账号。
 
@@ -332,12 +345,12 @@ curl -i -X POST http://localhost:3000/api/v1/user/login/choose \
 }
 ```
 
-字段说明与 `/api/v1/user/login/sms` 相同。
+字段说明与 `/api/v1/auth/login/sms` 相同。
 
 #### 请求示例
 
 ```bash
-curl -i -X POST http://localhost:3000/api/v1/user/register/sms \
+curl -i -X POST http://localhost:3000/api/v1/auth/register/sms \
   -H "Content-Type: application/json" \
   -c cookie.txt \
   -d '{
@@ -596,7 +609,7 @@ curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d
 
 ## 发布动态
 
-### `POST /api/v1/user/moments`
+### `POST /api/v1/moment`
 
 发布当前登录用户的动态。支持设置发布状态（正常/草稿）、可见权限（公开/仅好友/仅自己/仅粉丝）、评论权限（全部可评论/仅好友可评论/仅粉丝可评论/全部不可评论）以及个人置顶。全站置顶（`top=100`）不允许普通用户设置，服务端会直接拒绝。
 
@@ -632,7 +645,7 @@ curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d
 #### 请求示例
 
 ```bash
-curl -i -X POST http://localhost:3000/api/v1/user/moments \
+curl -i -X POST http://localhost:3000/api/v1/moment \
   -H "Content-Type: application/json" \
   -b cookie.txt \
   -d '{"content":"今天天气真好","status":0,"permission":0,"comment_permission":0,"top":0}'
@@ -703,10 +716,10 @@ curl -i -X POST http://localhost:3000/api/v1/user/moments \
 #### 请求示例
 
 ```bash
-curl -i -X POST http://localhost:3000/api/v1/user/moments/likes \
+curl -i -X POST http://localhost:3000/api/v1/user/blocks \
   -H "Content-Type: application/json" \
   -b cookie.txt \
-  -d '{"moment_id":1}'
+  -d '{"target":20002,"type":1,"action":"add"}'
 ```
 
 #### 成功响应
@@ -890,11 +903,13 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
 
 ## 评论动态
 
-### `POST /api/v1/user/moments/comments`
+### `POST /api/v1/comment/moments`
 
-给动态发送评论。会写入 `comment` 表和 `interacts` 表（type=103 对内容评论），并原子自增 `moment_meta.comment_count`。被拉黑/拉黑对方、评论权限不允许、或被封禁评论权限时拒绝。
+给动态发送评论。会写入 `comment` 表和 `interacts` 表（type=103 对内容评论），并原子自增 `moment_interact_count.comment_count`。被拉黑/拉黑对方、评论权限不允许、或被封禁评论权限时拒绝。
 
-> 接口按内容类型划分：评论动态挂在 `/moments/` 下。后续文章等类型使用各自的子路径（如 `/articles/comments`），不再使用通用的 `/comments`。
+> 评论接口统一挂在 `/comment/` 分组下，并按被评论内容类型划分子路径：评论动态为 `/comment/moments`，后续文章等类型为 `/comment/articles`，不提供通用 `/comment` 根接口。
+
+> 回复与楼中楼对话接口见下文「回复评论（楼中楼）」与「获取楼中楼完整对话」。
 
 #### 请求头
 
@@ -957,7 +972,7 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
 
 ## 回复评论（楼中楼）
 
-### `POST /api/v1/user/moments/comments/:id/replies`
+### `POST /api/v1/comment/moments/:id/replies`
 
 回复动态下的某条评论（楼中楼）。回复同样写入 `comment` 表（`target_type=2`，`target_id` 为被回复的评论 id），并在 `interacts` 表写入 `type=104 回复评论` 记录（`user_to` 为被回复评论作者，`reference_id` 为楼中楼首条评论 id）。
 
@@ -967,7 +982,7 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
 - 评论权限封禁（`PermComment`）期间不可回复，返回 `40302`。
 - 与动态作者或被回复评论作者存在任意一方拉黑关系时不可回复，返回 `40301`。
 - 评论权限按所属动态的 `comment_permission` 校验（与评论动态一致）。
-- 楼中楼回复不计入 `moment_meta.comment_count`（该计数只统计一级评论），完整回复列表通过对话接口获取。
+- 楼中楼回复不计入 `moment_interact_count.comment_count`（该计数只统计一级评论），完整回复列表通过对话接口获取。
 - 支持回复自己的评论、回复自己动态下的评论。
 
 #### 请求头
@@ -1031,7 +1046,7 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
 
 ## 获取楼中楼完整对话
 
-### `GET /api/v1/user/moments/comments/:id/conversation`
+### `GET /api/v1/comment/moments/:id/conversation`
 
 传入楼中楼首条评论 id，返回该评论（`root`）及其全部子孙回复（`replies`，扁平列表按时间正序）。`count` 为该楼的全部回复总数。
 
@@ -1051,7 +1066,7 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
 #### 请求示例
 
 ```bash
-curl -i "http://localhost:3000/api/v1/user/moments/comments/1/conversation?offset=0&limit=20" \
+curl -i "http://localhost:3000/api/v1/comment/moments/1/conversation?offset=0&limit=20" \
   -b cookie.txt
 ```
 
@@ -1276,11 +1291,11 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
 
 ## 给动态点赞
 
-### `POST /api/v1/user/moments/likes`
+### `POST /api/v1/moment/likes`
 
 给动态点赞。被拉黑/拉黑对方不能点赞。点赞会同步自增动态的点赞计数。
 
-> 接口按内容类型划分：点赞动态挂在 `/moments/` 下。后续文章等类型使用各自的子路径（如 `/articles/likes`），不再使用通用的 `/likes`。
+> 动态相关接口统一挂在 `/moment/` 分组下。后续文章等类型使用各自的子路径（如 `/article/likes`），不提供通用的 `/likes`。
 
 #### 请求头
 
@@ -1330,17 +1345,17 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
 
 ### 首次短信登录或自动注册
 
-1. 调用 `POST /api/v1/sms/send` 获取 `code_uuid`。
+1. 调用 `POST /api/v1/auth/sms/send` 获取 `code_uuid`。
 2. 用户输入短信验证码。
-3. 调用 `POST /api/v1/user/login/sms`。
+3. 调用 `POST /api/v1/auth/login/sms`。
 4. 如果返回 `200` 或 `201`，登录完成。
-5. 如果返回 `300`，保存同一个 cookie，并调用 `POST /api/v1/user/login/choose` 选择账号。
+5. 如果返回 `300`，保存同一个 cookie，并调用 `POST /api/v1/auth/login/choose` 选择账号。
 
 ### 为同一手机号追加新账号
 
-1. 调用 `POST /api/v1/sms/send` 获取 `code_uuid`。
+1. 调用 `POST /api/v1/auth/sms/send` 获取 `code_uuid`。
 2. 用户输入短信验证码。
-3. 调用 `POST /api/v1/user/register/sms`。
+3. 调用 `POST /api/v1/auth/register/sms`。
 4. 返回 `201` 时，新账号创建并登录完成。
 
 ## 状态码速查

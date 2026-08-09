@@ -67,7 +67,7 @@ func (d *InteractsDAO) LikeMomentAndMeta(userID uint32, momentID uint64) error {
 		if err := tx.Create(&interact).Error; err != nil {
 			return err
 		}
-		return tx.Model(&modelmoment.MomentMetaData{}).
+		return tx.Model(&modelmoment.MomentInteractCount{}).
 			Where("moment_id = ?", momentID).
 			UpdateColumn("like_count", gorm.Expr("like_count + ?", 1)).Error
 	})
@@ -86,7 +86,7 @@ func (d *InteractsDAO) UnlikeMomentAndMeta(userID uint32, momentID uint64) error
 		if result.RowsAffected == 0 {
 			return nil
 		}
-		return tx.Model(&modelmoment.MomentMetaData{}).
+		return tx.Model(&modelmoment.MomentInteractCount{}).
 			Where("moment_id = ?", momentID).
 			UpdateColumn("like_count", gorm.Expr("like_count - ?", 1)).Error
 	})

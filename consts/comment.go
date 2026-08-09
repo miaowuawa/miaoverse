@@ -3,8 +3,9 @@ package consts
 // 评论域常量：目标类型、状态、内容长度限制、楼中楼对话深度。
 
 const (
-	CommentTargetMoment  uint8 = 1 // 动态
-	CommentTargetComment uint8 = 2 // 其他评论（楼中楼）
+	CommentTargetMoment  uint8 = 1   // 动态
+	CommentTargetArticle uint8 = 2   // 文章
+	CommentTargetComment uint8 = 100 // 其他评论（楼中楼）
 )
 
 const (

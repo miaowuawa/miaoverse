@@ -15,7 +15,7 @@ func (d *ContentDAO) CreateMoment(m moment.Moment) (*moment.Moment, error) {
 			return err
 		}
 		// 同步创建计数元数据，保证后续计数自增有目标行
-		return tx.Create(&moment.MomentMetaData{MomentID: m.ID}).Error
+		return tx.Create(&moment.MomentInteractCount{MomentID: m.ID}).Error
 	})
 	if err != nil {
 		return nil, err
@@ -85,30 +85,30 @@ func (d *ContentDAO) DeleteMoment(id uint64) error {
 		Update("status", consts.MomentStatusDeleted).Error
 }
 
-func (d *ContentDAO) CreateMomentMeta(meta moment.MomentMetaData) error {
+func (d *ContentDAO) CreateMomentInteractCount(meta moment.MomentInteractCount) error {
 	return d.DB.Create(&meta).Error
 }
 
-func (d *ContentDAO) QueryMomentMeta(momentID uint64) (*moment.MomentMetaData, error) {
-	var meta moment.MomentMetaData
+func (d *ContentDAO) QueryMomentInteractCount(momentID uint64) (*moment.MomentInteractCount, error) {
+	var meta moment.MomentInteractCount
 	err := d.DB.Where("moment_id = ?", momentID).First(&meta).Error
 	return &meta, err
 }
 
-func (d *ContentDAO) IncrementMomentMeta(momentID uint64, field string, delta int64) error {
-	return d.DB.Model(&moment.MomentMetaData{}).
+func (d *ContentDAO) IncrementMomentInteractCount(momentID uint64, field string, delta int64) error {
+	return d.DB.Model(&moment.MomentInteractCount{}).
 		Where("moment_id = ?", momentID).
 		UpdateColumn(field, gorm.Expr(field+" + ?", delta)).Error
 }
 
-// QueryMomentMetas 批量查询动态互动计数
-func (d *ContentDAO) QueryMomentMetas(momentIDs []uint64) (map[uint64]moment.MomentMetaData, error) {
-	result := map[uint64]moment.MomentMetaData{}
+// QueryMomentInteractCounts 批量查询动态互动计数
+func (d *ContentDAO) QueryMomentInteractCounts(momentIDs []uint64) (map[uint64]moment.MomentInteractCount, error) {
+	result := map[uint64]moment.MomentInteractCount{}
 	if len(momentIDs) == 0 {
 		return result, nil
 	}
 
-	var list []moment.MomentMetaData
+	var list []moment.MomentInteractCount
 	if err := d.DB.Where("moment_id IN ?", momentIDs).Find(&list).Error; err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (d *ContentDAO) QueryAllMomentIDs() ([]moment.Moment, error) {
 }
 
 // QueryRecentMomentIDs 查询最近 N 分钟内更新过的动态 ID（用于增量校准）。
-// 动态本身、评论、点赞都会刷新 moment.updated_at 或 moment_meta.updated_at。
+// 动态本身、评论、点赞都会刷新 moment.updated_at 或 moment_interact_count.updated_at。
 func (d *ContentDAO) QueryRecentMomentIDs(since time.Time) ([]uint64, error) {
 	var ids []uint64
 	err := d.DB.Model(&moment.Moment{}).
@@ -139,10 +139,10 @@ func (d *ContentDAO) QueryRecentMomentIDs(since time.Time) ([]uint64, error) {
 	return ids, nil
 }
 
-// SetMomentMetaCounts 批量覆盖动态计数（用于定期校准，保证 metadata 与实际数量同步）
-func (d *ContentDAO) SetMomentMetaCounts(updates map[uint64]moment.MomentMetaData) error {
+// SetMomentInteractCounts 批量覆盖动态计数（用于定期校准，保证计数与互动记录实际数量同步）
+func (d *ContentDAO) SetMomentInteractCounts(updates map[uint64]moment.MomentInteractCount) error {
 	for momentID, meta := range updates {
-		if err := d.DB.Model(&moment.MomentMetaData{}).
+		if err := d.DB.Model(&moment.MomentInteractCount{}).
 			Where("moment_id = ?", momentID).
 			Updates(map[string]any{
 				"like_count":    meta.LikeCount,
@@ -154,13 +154,13 @@ func (d *ContentDAO) SetMomentMetaCounts(updates map[uint64]moment.MomentMetaDat
 	return nil
 }
 
-// UpsertMomentMetaCounts 批量覆盖动态计数（单条 SQL 批量 upsert，避免逐条 UPDATE）。
-func (d *ContentDAO) UpsertMomentMetaCounts(updates map[uint64]moment.MomentMetaData) error {
+// UpsertMomentInteractCounts 批量覆盖动态计数（单条 SQL 批量 upsert，避免逐条 UPDATE）。
+func (d *ContentDAO) UpsertMomentInteractCounts(updates map[uint64]moment.MomentInteractCount) error {
 	if len(updates) == 0 {
 		return nil
 	}
 
-	rows := make([]moment.MomentMetaData, 0, len(updates))
+	rows := make([]moment.MomentInteractCount, 0, len(updates))
 	for _, meta := range updates {
 		rows = append(rows, meta)
 	}

@@ -63,7 +63,7 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	metas, err := servants.ContentServant.QueryMomentMetas(momentIDs(moments))
+	metas, err := servants.ContentServant.QueryMomentInteractCounts(momentIDs(moments))
 	if err != nil {
 		return resp.ServerError(ctx)
 	}

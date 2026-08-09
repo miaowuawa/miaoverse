@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS `moment` (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='moments';
 
-CREATE TABLE IF NOT EXISTS `moment_meta` (
+CREATE TABLE IF NOT EXISTS `moment_interact_count` (
     `moment_id`     BIGINT UNSIGNED NOT NULL COMMENT 'moment.id',
     `like_count`    INT UNSIGNED NOT NULL DEFAULT 0,
     `comment_count` INT UNSIGNED NOT NULL DEFAULT 0,
@@ -95,10 +95,10 @@ CREATE TABLE IF NOT EXISTS `moment_meta` (
     `repost_count`  INT UNSIGNED NOT NULL DEFAULT 0,
     `updated_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`moment_id`),
-    CONSTRAINT `fk_moment_meta_moment_id`
+    CONSTRAINT `fk_moment_interact_count_moment_id`
         FOREIGN KEY (`moment_id`) REFERENCES `moment` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='moment counters';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='moment interact counters';
 
 CREATE TABLE IF NOT EXISTS `interacts` (
     `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'interact id',
@@ -174,3 +174,43 @@ CREATE TABLE IF NOT EXISTS `punishment` (
         FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='user permission punishments';
+
+CREATE TABLE IF NOT EXISTS `article_meta` (
+    `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'article id (exposed to frontend)',
+    `mongo_id`    VARCHAR(24)     NOT NULL DEFAULT '' COMMENT 'mongodb article _id (hex), internal only',
+    `user_id`     INT UNSIGNED    NOT NULL COMMENT 'author user id',
+    `title`       VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'article title',
+    `description` VARCHAR(500)    NOT NULL DEFAULT '' COMMENT 'article description/summary',
+    `preview_head` VARCHAR(300)   NOT NULL DEFAULT '' COMMENT 'preview of article head',
+    `cover`       VARCHAR(255)    NOT NULL DEFAULT '' COMMENT 'cover image url',
+    `type`        TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 normal, 1 repost, 2 novel',
+    `novel_id`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'novel root article id, 0 means not a chapter',
+    `chapter_id`  BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'chapter number of the novel (1-based), valid for novel type',
+    `status`      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 normal, 1 deleted, 2 draft, 3 restricted, 4 blocked',
+    `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at`  DATETIME        NULL DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_article_meta_mongo_id` (`mongo_id`),
+    KEY `idx_article_meta_user_id_status` (`user_id`, `status`),
+    KEY `idx_article_meta_novel_chapter` (`novel_id`, `chapter_id`),
+    KEY `idx_article_meta_created_at` (`created_at`),
+    CONSTRAINT `fk_article_meta_user_id`
+        FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='article metadata (body in mongodb)';
+
+CREATE TABLE IF NOT EXISTS `article_interact_count` (
+    `article_id`    BIGINT UNSIGNED NOT NULL COMMENT 'article_meta.id',
+    `like_count`    INT UNSIGNED NOT NULL DEFAULT 0,
+    `comment_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `share_count`   INT UNSIGNED NOT NULL DEFAULT 0,
+    `view_count`    INT UNSIGNED NOT NULL DEFAULT 0,
+    `click_count`   INT UNSIGNED NOT NULL DEFAULT 0,
+    `repost_count`  INT UNSIGNED NOT NULL DEFAULT 0,
+    `updated_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`article_id`),
+    CONSTRAINT `fk_article_interact_count_article_id`
+        FOREIGN KEY (`article_id`) REFERENCES `article_meta` (`id`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='article interact counters';

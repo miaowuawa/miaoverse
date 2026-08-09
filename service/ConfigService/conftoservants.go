@@ -9,12 +9,15 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"miaoverse/dao"
+	"miaoverse/dao/article"
 	"miaoverse/dao/content"
 	"miaoverse/dao/interacts"
 	"miaoverse/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
 	"miaoverse/service/UserBlock"
+	storagemongo "miaoverse/service/mongo"
 	storages3 "miaoverse/service/s3"
 	"miaoverse/service/security/sms/codemanager"
 	"miaoverse/service/security/sms/smsbao"
@@ -127,6 +130,28 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		}
 	}
 
+	var mongoServant *storagemongo.Servant
+	var articleServant *article.ArticleDAO
+	if conf.Mongo.Enabled {
+		mongoServant, err = storagemongo.NewServant(context.Background(), storagemongo.Config{
+			Host:                   conf.Mongo.Host,
+			Port:                   conf.Mongo.Port,
+			Username:               conf.Mongo.Username,
+			Password:               conf.Mongo.Password,
+			AuthSource:             conf.Mongo.AuthSource,
+			Database:               conf.Mongo.DbName,
+			MaxPoolSize:            conf.Mongo.MaxPoolSize,
+			MinPoolSize:            conf.Mongo.MinPoolSize,
+			ConnectTimeout:         time.Duration(conf.Mongo.ConnectTimeoutSeconds) * time.Second,
+			ServerSelectionTimeout: time.Duration(conf.Mongo.ServerSelectionTimeoutSeconds) * time.Second,
+		})
+		if err != nil {
+			return nil, err
+		}
+		// 文章域跨库：元数据在 MySQL，正文在 MongoDB
+		articleServant = dao.NewArticleDao(db, mongoServant.Database())
+	}
+
 	//final:return
 	return &server.Servants{
 		FiberSessionStorage: SessionStorage,
@@ -135,9 +160,11 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		UserServant:         userdao,
 		ContentServant:      contentdao,
 		InteractsServant:    interactsdao,
+		ArticleServant:      articleServant,
 		BlockServant:        blockServant,
 		Validator:           validator,
 		S3Servant:           s3Servant,
+		MongoServant:        mongoServant,
 		MaxUploadFileSize:   conf.UploadMaxFileSizeBytes(),
 	}, nil
 

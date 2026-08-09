@@ -10,7 +10,7 @@ import (
 	"miaoverse/model/server"
 )
 
-// Start 启动动态计数定期校准任务，保证 moment_meta 与实际数量同步。
+// Start 启动动态计数定期校准任务，保证 moment_interact_count 与实际数量同步。
 // 采用增量校准：只重算最近 consts.MetaSyncReconcileWindow 内有更新的动态，分批聚合统计后批量 upsert。
 // 定时任务由调用方（cmd 启动流程）负责关闭。
 func Start(ctx context.Context, servants *server.Servants, interval time.Duration) {
@@ -67,15 +67,15 @@ func ReconcileMomentMetas(ctx context.Context, servants *server.Servants) error 
 			return err
 		}
 
-		updates := make(map[uint64]modelmoment.MomentMetaData, len(chunk))
+		updates := make(map[uint64]modelmoment.MomentInteractCount, len(chunk))
 		for _, id := range chunk {
-			updates[id] = modelmoment.MomentMetaData{
+			updates[id] = modelmoment.MomentInteractCount{
 				MomentID:     id,
 				LikeCount:    uint32(likes[id]),
 				CommentCount: uint32(comments[id]),
 			}
 		}
-		if err := servants.ContentServant.UpsertMomentMetaCounts(updates); err != nil {
+		if err := servants.ContentServant.UpsertMomentInteractCounts(updates); err != nil {
 			return err
 		}
 	}

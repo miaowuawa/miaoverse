@@ -20,8 +20,8 @@ func (Moment) TableName() string {
 	return "moment"
 }
 
-// MomentMetaData 动态计数元数据（冗余计数，由互动事件维护）
-type MomentMetaData struct {
+// MomentInteractCount 动态互动计数（冗余计数，由互动事件维护）
+type MomentInteractCount struct {
 	MomentID     uint64    `gorm:"primaryKey" json:"moment_id"`
 	LikeCount    uint32    `gorm:"not null;default:0" json:"like_count"`
 	CommentCount uint32    `gorm:"not null;default:0" json:"comment_count"`
@@ -32,6 +32,6 @@ type MomentMetaData struct {
 	UpdatedAt    time.Time `gorm:"not null;default:CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
-func (MomentMetaData) TableName() string {
-	return "moment_meta"
+func (MomentInteractCount) TableName() string {
+	return "moment_interact_count"
 }

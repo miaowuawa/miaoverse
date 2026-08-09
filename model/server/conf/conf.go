@@ -22,6 +22,19 @@ type AppConfig struct {
 		Username string `yaml:"username"`
 		Password string `yaml:"password"`
 	} `yaml:"redis"`
+	Mongo struct {
+		Enabled                       bool   `yaml:"enabled"`
+		Host                          string `yaml:"host"`
+		Port                          int    `yaml:"port"`
+		Username                      string `yaml:"username"`
+		Password                      string `yaml:"password"`
+		AuthSource                    string `yaml:"auth_source"`
+		DbName                        string `yaml:"db_name"`
+		MaxPoolSize                   uint64 `yaml:"max_pool_size"`
+		MinPoolSize                   uint64 `yaml:"min_pool_size"`
+		ConnectTimeoutSeconds         int    `yaml:"connect_timeout_seconds"`
+		ServerSelectionTimeoutSeconds int    `yaml:"server_selection_timeout_seconds"`
+	} `yaml:"mongo"`
 	Session struct {
 		DB int `yaml:"dbnum"`
 	} `yaml:"session"`

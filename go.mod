@@ -3,6 +3,8 @@ module miaoverse
 go 1.25.7
 
 require (
+	github.com/RoaringBitmap/roaring v1.9.4
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/aws/aws-sdk-go-v2 v1.41.9
 	github.com/aws/aws-sdk-go-v2/config v1.32.20
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.19
@@ -12,14 +14,13 @@ require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/gofiber/storage/redis/v3 v3.4.3
 	github.com/spf13/viper v1.21.0
+	go.mongodb.org/mongo-driver/v2 v2.8.0
 	golang.org/x/crypto v0.49.0
 	gorm.io/driver/mysql v1.6.0
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/RoaringBitmap/roaring v1.9.4 // indirect
-	github.com/alicebob/miniredis/v2 v2.38.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.11 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.25 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.25 // indirect
@@ -45,7 +46,12 @@ require (
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/redis/go-redis/v9 v9.17.3 // indirect
+	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
+	github.com/xdg-go/scram v1.2.0 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
+	golang.org/x/sync v0.20.0 // indirect
 )
 
 require (

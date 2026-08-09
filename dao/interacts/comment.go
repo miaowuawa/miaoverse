@@ -51,7 +51,7 @@ func (d *InteractsDAO) CreateCommentAndMeta(comment modelinteracts.Comment, mome
 		if err := tx.Create(&interact).Error; err != nil {
 			return err
 		}
-		return tx.Model(&modelmoment.MomentMetaData{}).
+		return tx.Model(&modelmoment.MomentInteractCount{}).
 			Where("moment_id = ?", momentID).
 			UpdateColumn("comment_count", gorm.Expr("comment_count + ?", 1)).Error
 	})
@@ -63,7 +63,7 @@ func (d *InteractsDAO) CreateCommentAndMeta(comment modelinteracts.Comment, mome
 
 // CreateReplyCommentAndInteract 创建楼中楼回复并写入互动记录（事务，原子性）。
 // 互动记录：type=reply，target_type=comment，user_to=被回复评论作者，reference_id=楼中楼首条评论 id。
-// 楼中楼回复不计入 moment_meta.comment_count（该计数只统计 target_type=moment 的一级评论，见 CountMomentCommentsReal）。
+// 楼中楼回复不计入 moment_interact_count.comment_count（该计数只统计 target_type=moment 的一级评论，见 CountMomentCommentsReal）。
 func (d *InteractsDAO) CreateReplyCommentAndInteract(comment modelinteracts.Comment, interact modelinteracts.Interacts) (*modelinteracts.Comment, error) {
 	err := d.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&comment).Error; err != nil {

@@ -74,7 +74,7 @@ func ToMomentInfo(m *modelmoment.Moment) resp.MomentInfo {
 }
 
 // ToContentItem 将动态转换为内容列表项
-func ToContentItem(m *modelmoment.Moment, metas map[uint64]modelmoment.MomentMetaData) resp.ContentItem {
+func ToContentItem(m *modelmoment.Moment, metas map[uint64]modelmoment.MomentInteractCount) resp.ContentItem {
 	item := resp.ContentItem{
 		ID:   m.ID,
 		Type: consts.ContentTypeMoment,
