@@ -14,6 +14,7 @@ func MeHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if !ok {
 		return resp.Unauthorized(ctx)
 	}
+	resp.MaskClosedAccount(ctx, user)
 	return ctx.Status(fiber.StatusOK).JSON(resp.CodeWithMsgUser{
 		Code: fiber.StatusOK,
 		Msg:  i18n.Message(ctx, i18n.OKUserInfoFetched),

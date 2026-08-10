@@ -8,7 +8,8 @@ import (
 )
 
 func CheckAndCreateIfNotExists(phone string, region uint16, servants *server.Servants) ([]user.User, bool, error) {
-	users, err := servants.UserServant.QueryByPhone(phone, region)
+	// 已注销账号不可登录，不计入可选账号；手机号下账号全部注销时视为新手机号，自动创建新账号。
+	users, err := servants.UserServant.QueryByPhoneLoginable(phone, region)
 	if err != nil {
 		return nil, false, err
 	}
@@ -49,7 +50,8 @@ func CreateAccountForPhone(phone string, region uint16, servants *server.Servant
 }
 
 func UserBelongsToPhone(userID uint32, phone string, region uint16, servants *server.Servants) (bool, error) {
-	users, err := servants.UserServant.QueryByPhone(phone, region)
+	// 仅校验可登录账号，已注销账号不能作为登录/切换目标。
+	users, err := servants.UserServant.QueryByPhoneLoginable(phone, region)
 	if err != nil {
 		return false, err
 	}

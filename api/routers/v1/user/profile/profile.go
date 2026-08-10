@@ -88,6 +88,7 @@ func updateProfile(ctx fiber.Ctx, servants *server.Servants, uid uint32, updates
 		return resp.ServerError(ctx)
 	}
 
+	resp.MaskClosedAccount(ctx, user)
 	return ctx.Status(fiber.StatusOK).JSON(resp.CodeWithMsgUser{
 		Code: fiber.StatusOK,
 		Msg:  i18n.Message(ctx, i18n.OKUserInfoUpdated),

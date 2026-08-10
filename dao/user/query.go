@@ -7,15 +7,29 @@ import (
 	"miaoverse/model/dao/user"
 )
 
+// QueryByPhone 查询指定手机号绑定的全部账号（含已注销），用于注册等存在性判断。
 func (d *UserDAO) QueryByPhone(phone string, region uint16) ([]user.User, error) {
+	return d.queryByPhone(phone, region, false)
+}
+
+// QueryByPhoneLoginable 查询指定手机号绑定的可登录账号。
+// 已注销账号（UserStatusClosed）无法再登录，统一过滤，避免出现在登录选择、账号切换等列表中。
+func (d *UserDAO) QueryByPhoneLoginable(phone string, region uint16) ([]user.User, error) {
+	return d.queryByPhone(phone, region, true)
+}
+
+func (d *UserDAO) queryByPhone(phone string, region uint16, excludeClosed bool) ([]user.User, error) {
 	var users []user.User
-	err := d.DB.Table("`user`").
+	query := d.DB.Table("`user`").
 		Select("`user`.*").
 		Joins("JOIN user_credentials AS phone_cred ON phone_cred.user_id = `user`.id").
 		Joins("JOIN user_credentials AS region_cred ON region_cred.user_id = `user`.id").
 		Where("phone_cred.credential_type = ? AND phone_cred.credential_key = ? AND phone_cred.credential_value = ?", consts.Phone, "phone", phone).
-		Where("region_cred.credential_type = ? AND region_cred.credential_key = ? AND region_cred.credential_value = ?", consts.Phone, "region", strconv.FormatUint(uint64(region), 10)).
-		Find(&users).Error
+		Where("region_cred.credential_type = ? AND region_cred.credential_key = ? AND region_cred.credential_value = ?", consts.Phone, "region", strconv.FormatUint(uint64(region), 10))
+	if excludeClosed {
+		query = query.Where("`user`.status != ?", consts.UserStatusClosed)
+	}
+	err := query.Find(&users).Error
 	return users, err
 }
 

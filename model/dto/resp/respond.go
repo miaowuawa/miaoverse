@@ -138,6 +138,7 @@ func ContentList(ctx fiber.Ctx, contents []ContentItem) error {
 }
 
 func UserInfoOK(ctx fiber.Ctx, info UserInfo) error {
+	MaskClosedAccount(ctx, &info.User)
 	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgUserInfo{
 		Code: fiber.StatusOK,
 		Msg:  i18n.Message(ctx, i18n.OKUserInfoFetched),
@@ -170,6 +171,9 @@ func Conversation(ctx fiber.Ctx, conversation ConversationInfo) error {
 }
 
 func RelationList(ctx fiber.Ctx, count int64, users []RelationUser) error {
+	for i := range users {
+		MaskClosedAccount(ctx, &users[i].User)
+	}
 	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgRelationList{
 		Code:  fiber.StatusOK,
 		Msg:   i18n.Message(ctx, i18n.OKRelationList),

@@ -125,7 +125,7 @@ func ChooseUserHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	return loginSingleAccount(ctx, phone, region, req.UID, fiber.StatusOK, i18n.OKLogin)
 }
 
-// AccountListHandler 返回当前会话登录手机号绑定的全部账号。
+// AccountListHandler 返回当前会话登录手机号绑定的全部可登录账号。
 // 仅要求已登录（不校验当前账号状态），被封禁的账号也可以看到账号列表并切换到其他正常账号。
 func AccountListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	phone, region, ok := UserSession.CurrentPhoneRegion(ctx)
@@ -133,7 +133,7 @@ func AccountListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.Unauthorized(ctx)
 	}
 
-	users, err := servants.UserServant.QueryByPhone(phone, region)
+	users, err := servants.UserServant.QueryByPhoneLoginable(phone, region)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}

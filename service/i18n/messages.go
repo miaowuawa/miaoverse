@@ -47,6 +47,9 @@ const (
 	ErrTargetPunished        MessageKey = "error.target_punished"
 	ErrS3Unavailable         MessageKey = "error.s3_unavailable"
 
+	UserClosedUsername MessageKey = "user.closed_username"
+	UserClosedBio      MessageKey = "user.closed_bio"
+
 	OKSMSSent              MessageKey = "ok.sms_sent"
 	OKLogin                MessageKey = "ok.login"
 	OKRegisterAndLogin     MessageKey = "ok.register_and_login"
@@ -405,6 +408,9 @@ func resetCatalog() {
 			ErrBlockedByRelation:     {Other: "由于对方权限设置，无法查看此内容"},
 			ErrPunished:              {Other: "账号封禁期间无法执行此操作"},
 			ErrTargetPunished:        {Other: "该用户存在违规记录，部分功能受限"},
+
+			UserClosedUsername: {Other: "已注销的账号"},
+			UserClosedBio:      {Other: "用户已注销。虽然我不知道 TA 在三次元过得好不好，但我替这个账号感谢你最后的回眸。 —— 站长留"},
 
 			OKSMSSent:              {Other: "发送成功"},
 			OKLogin:                {Other: "登录成功"},
