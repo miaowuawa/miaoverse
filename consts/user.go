@@ -32,4 +32,5 @@ const (
 	MaxUsernameLen = 64
 	MaxNicknameLen = 64
 	MaxAvatarLen   = 255
+	MaxBioLen      = 255
 )

@@ -3,6 +3,7 @@ package profile
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
@@ -59,6 +60,17 @@ func UpdatePartialHandler(ctx fiber.Ctx, servants *server.Servants) error {
 }
 
 func updateProfile(ctx fiber.Ctx, servants *server.Servants, uid uint32, updates map[string]any) error {
+	// 修改个性签名需要未被封禁 PermSignature 权限位，否则返回 40302
+	if _, hasBio := updates["bio"]; hasBio {
+		punished, err := servants.UserServant.HasActivePunishment(uid, consts.PermSignature, time.Now())
+		if err != nil {
+			return resp.ServerError(ctx)
+		}
+		if punished {
+			return resp.Punished(ctx)
+		}
+	}
+
 	user, err := servants.UserServant.UpdateProfile(uid, updates)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -87,7 +99,8 @@ func fullUpdates(req *updatereq.ProfileFull) (map[string]any, bool) {
 	username := strings.TrimSpace(req.Username)
 	nickname := strings.TrimSpace(req.Nickname)
 	avatar := strings.TrimSpace(req.Avatar)
-	if !validUsername(username) || !validNickname(nickname) || !validRegion(req.Region) || !validAvatar(avatar) || !validGender(req.Gender) {
+	bio := strings.TrimSpace(req.Bio)
+	if !validUsername(username) || !validNickname(nickname) || !validRegion(req.Region) || !validAvatar(avatar) || !validBio(bio) || !validGender(req.Gender) {
 		return nil, false
 	}
 
@@ -96,6 +109,7 @@ func fullUpdates(req *updatereq.ProfileFull) (map[string]any, bool) {
 		"nickname": nickname,
 		"region":   req.Region,
 		"avatar":   avatar,
+		"bio":      bio,
 		"gender":   req.Gender,
 	}, true
 }
@@ -130,6 +144,13 @@ func patchUpdates(req *updatereq.ProfilePatch) (map[string]any, bool) {
 		}
 		updates["avatar"] = avatar
 	}
+	if req.Bio != nil {
+		bio := strings.TrimSpace(*req.Bio)
+		if !validBio(bio) {
+			return nil, false
+		}
+		updates["bio"] = bio
+	}
 	if req.Gender != nil {
 		if !validGender(*req.Gender) {
 			return nil, false
@@ -154,6 +175,10 @@ func validRegion(value uint16) bool {
 
 func validAvatar(value string) bool {
 	return len(value) <= consts.MaxAvatarLen
+}
+
+func validBio(value string) bool {
+	return len(value) <= consts.MaxBioLen
 }
 
 func validGender(value uint8) bool {

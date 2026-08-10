@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `nickname` VARCHAR(64) NOT NULL COMMENT 'display name',
     `region` SMALLINT UNSIGNED NOT NULL COMMENT 'phone region code',
     `avatar` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'avatar url',
+    `bio` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'bio/signature',
     `gender` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 unknown, 1 male, 2 female, 3 non-binary',
     `status` TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1 active, 2 banned, 3 closed, 4 disabled',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

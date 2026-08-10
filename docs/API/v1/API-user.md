@@ -235,6 +235,7 @@ curl -i -X POST http://localhost:3000/api/v1/auth/login/sms \
       "nickname": "nickname_xxx",
       "region": 86,
       "avatar": "",
+      "bio": "",
       "gender": 0,
       "status": 1,
       "created_at": "2026-06-01T12:00:00+08:00",
@@ -244,7 +245,7 @@ curl -i -X POST http://localhost:3000/api/v1/auth/login/sms \
 }
 ```
 
-注意：`users` 中的字段来自 Go 结构体 `model/dao/user.User`，JSON 字段名为小写下划线格式（`id`、`username`、`nickname`、`region`、`avatar`、`gender`、`status`、`created_at`、`updated_at`）。
+注意：`users` 中的字段来自 Go 结构体 `model/dao/user.User`，JSON 字段名为小写下划线格式（`id`、`username`、`nickname`、`region`、`avatar`、`bio`、`gender`、`status`、`created_at`、`updated_at`）。
 
 #### Session 行为
 
@@ -418,6 +419,7 @@ curl -i http://localhost:3000/api/v1/auth/accounts \
       "nickname": "nickname_xxx",
       "region": 86,
       "avatar": "",
+      "bio": "",
       "gender": 0,
       "status": 1,
       "created_at": "2026-06-01T12:00:00+08:00",
@@ -429,6 +431,7 @@ curl -i http://localhost:3000/api/v1/auth/accounts \
       "nickname": "nickname_yyy",
       "region": 86,
       "avatar": "",
+      "bio": "",
       "gender": 0,
       "status": 1,
       "created_at": "2026-06-01T12:00:00+08:00",
@@ -583,6 +586,7 @@ curl -i http://localhost:3000/api/v1/user/me \
     "nickname": "nickname_xxx",
     "region": 86,
     "avatar": "",
+    "bio": "",
     "gender": 0,
     "status": 1,
     "created_at": "2026-06-01T12:00:00+08:00",
@@ -617,6 +621,7 @@ curl -i http://localhost:3000/api/v1/user/me \
   "nickname": "Miaowu",
   "region": 86,
   "avatar": "https://example.com/avatar.png",
+  "bio": "Hello, Miaoverse!",
   "gender": 0
 }
 ```
@@ -629,6 +634,7 @@ curl -i http://localhost:3000/api/v1/user/me \
 | `nickname` | string | 是 | 昵称，1-64 字符 |
 | `region` | number | 是 | 用户资料地区，必须大于 0 |
 | `avatar` | string | 是 | 头像 URL，可为空字符串，最长 255 字符 |
+| `bio` | string | 是 | 个性签名，可为空字符串，最长 255 字符。修改时要求未被封禁签名权限位，否则返回 `403`，body 中 `code` 为 `40302` |
 | `gender` | number | 是 | `0` 未知，`1` 男，`2` 女，`3` 非二元性别 |
 
 #### 成功响应
@@ -644,6 +650,7 @@ curl -i http://localhost:3000/api/v1/user/me \
     "nickname": "Miaowu",
     "region": 86,
     "avatar": "https://example.com/avatar.png",
+    "bio": "Hello, Miaoverse!",
     "gender": 0,
     "status": 1,
     "created_at": "2026-06-01T12:00:00+08:00",
@@ -661,7 +668,7 @@ curl -i http://localhost:3000/api/v1/user/me \
 curl -i -X PATCH http://localhost:3000/api/v1/user/info \
   -H "Content-Type: application/json" \
   -b cookie.txt \
-  -d '{"nickname":"新的昵称","avatar":""}'
+  -d '{"nickname":"新的昵称","bio":"新的签名"}'
 ```
 
 #### 可能的错误
@@ -669,6 +676,7 @@ curl -i -X PATCH http://localhost:3000/api/v1/user/info \
 | --- | --- |
 | `400` | 请求体不是 JSON、字段为空、字段长度/取值不合法，或 PATCH 未包含任何可更新字段 |
 | `401` | 未登录或 session 中没有 `UID` |
+| `403` | 修改 `bio` 时签名权限被封禁（`code` 为 `40302`） |
 | `404` | session 中的用户不存在 |
 | `409` | `username` 或 `nickname` 等唯一字段与已有用户冲突 |
 | `500` | 数据库异常 |
@@ -1088,6 +1096,7 @@ curl -i http://localhost:3000/api/v1/user/users/20002/info \
     "nickname": "nickname_xxx",
     "region": 86,
     "avatar": "",
+    "bio": "",
     "gender": 0,
     "status": 1,
     "created_at": "2026-06-01T12:00:00+08:00",
@@ -1428,6 +1437,7 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
       "nickname": "nickname_xxx",
       "region": 86,
       "avatar": "",
+      "bio": "",
       "gender": 0,
       "status": 1,
       "created_at": "2026-06-01T12:00:00+08:00",

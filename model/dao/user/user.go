@@ -9,6 +9,7 @@ CREATE TABLE `user` (
     `nickname` VARCHAR(64) NOT NULL COMMENT '昵称（唯一）',
     `region` SMALLINT UNSIGNED NOT NULL COMMENT '手机区号，如 86',
     `avatar` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '头像URL',
+    `bio` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '个性签名',
     `gender` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0-未知 1-男 2-女 3-非二元性别',
     `status` TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '1-正常 2-封禁 3-注销 4-停用',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '注册时间',
@@ -26,6 +27,7 @@ type User struct {
 	Nickname  string    `gorm:"not null;uniqueIndex" json:"nickname"`
 	Region    uint16    `gorm:"not null" json:"region"`
 	Avatar    string    `gorm:"default:''" json:"avatar"`
+	Bio       string    `gorm:"default:''" json:"bio"`
 	Gender    uint8     `gorm:"default:0" json:"gender"`
 	Status    uint8     `gorm:"not null;default:1" json:"status"`
 	CreatedAt time.Time `gorm:"not null;default:CURRENT_TIMESTAMP" json:"created_at"`
