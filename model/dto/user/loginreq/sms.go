@@ -11,3 +11,7 @@ type SMS struct {
 type ChooseAccount struct {
 	UID uint32 `json:"uid" validate:"required"`
 }
+
+type SwitchAccount struct {
+	UID uint32 `json:"uid" validate:"required"`
+}

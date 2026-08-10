@@ -8,7 +8,7 @@
 
 | 分组 | 前缀 | 是否需要登录 | 内容 |
 | --- | --- | --- | --- |
-| 认证 | `/api/v1/auth` | 否 | 短信验证码、登录、注册 |
+| 认证 | `/api/v1/auth` | 否（账号列表/切换需登录） | 短信验证码、登录、注册、切换账号 |
 | 动态 | `/api/v1/moment` | 是 | 发布动态、给动态点赞 |
 | 评论 | `/api/v1/comment` | 是 | 评论动态、回复评论（楼中楼）、获取楼中楼对话。按被评论内容类型划分子路径（`/comment/moments`，后续文章为 `/comment/articles`） |
 | 用户 | `/api/v1/user` | 是 | 资料、文件、关注、拉黑/屏蔽/不想看、惩罚记录、查看他人资料/内容/关系 |
@@ -382,6 +382,221 @@ curl -i -X POST http://localhost:3000/api/v1/auth/register/sms \
 | `403` | 验证码错误、验证码不存在或验证码已过期 |
 | `404` | 该手机号还没有任何账号 |
 | `500` | Redis、数据库或 session 写入异常 |
+
+## 获取可切换账号列表
+
+### `GET /api/v1/auth/accounts`
+
+返回当前会话登录手机号绑定的全部账号。仅要求已登录，不校验当前账号状态，因此当前账号被封禁时也能查看列表并切换。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/auth/accounts \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "current": 10001,
+  "users": [
+    {
+      "id": 10001,
+      "username": "user_xxx",
+      "nickname": "nickname_xxx",
+      "region": 86,
+      "avatar": "",
+      "gender": 0,
+      "status": 1,
+      "created_at": "2026-06-01T12:00:00+08:00",
+      "updated_at": "2026-06-01T12:00:00+08:00"
+    },
+    {
+      "id": 10002,
+      "username": "user_yyy",
+      "nickname": "nickname_yyy",
+      "region": 86,
+      "avatar": "",
+      "gender": 0,
+      "status": 1,
+      "created_at": "2026-06-01T12:00:00+08:00",
+      "updated_at": "2026-06-01T12:00:00+08:00"
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `current` | number | 当前登录账号的用户 ID |
+| `users` | array | 该手机号绑定的全部账号（字段与 `user` 表一致，含封禁账号） |
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `401` | 未登录或 session 中没有 `UID`/手机号 |
+| `500` | 数据库查询异常 |
+
+## 切换账号
+
+### `POST /api/v1/auth/switch`
+
+将当前会话切换到同一手机号绑定的另一个账号。仅要求已登录，不校验当前账号状态；目标账号必须属于当前会话手机号且账号状态为正常（未被封禁）。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "uid": 10002
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `uid` | number | 是 | 要切换到的账号 ID，必须属于当前会话手机号 |
+
+#### 请求示例
+
+```bash
+curl -i -X POST http://localhost:3000/api/v1/auth/switch \
+  -H "Content-Type: application/json" \
+  -b cookie.txt \
+  -c cookie.txt \
+  -d '{"uid":10002}'
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "登录成功",
+  "uid": 10002
+}
+```
+
+#### Session 行为
+
+切换成功后 session 会重新生成（新 `mwu_sess_id`），写入 `Phone`、`Region`、`UID`，后续请求必须携带响应中的新 cookie。
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、参数缺失或格式错误 |
+| `401` | 未登录或 session 中没有手机号 |
+| `403` | 目标账号不属于当前会话手机号（普通 `403`）；目标账号已被封禁（`code` 为 `40303`） |
+| `500` | 数据库或 session 写入异常 |
+
+## 退出登录
+
+### `POST /api/v1/auth/logout`销毁当前 session 并清除登录态 cookie。未登录时调用也返回成功（幂等）。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+
+#### 请求示例
+
+```bash
+curl -i -X POST http://localhost:3000/api/v1/auth/logout \
+  -H "Content-Type: application/json" \
+  -b cookie.txt \
+  -c cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "退出登录成功"
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `500` | session 销毁异常 |
+
+## 获取当前登录用户信息
+
+### `GET /api/v1/user/me`
+
+返回当前登录用户的基础信息，用于前端刷新/恢复登录态。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/user/me \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "user": {
+    "id": 10001,
+    "username": "user_xxx",
+    "nickname": "nickname_xxx",
+    "region": 86,
+    "avatar": "",
+    "gender": 0,
+    "status": 1,
+    "created_at": "2026-06-01T12:00:00+08:00",
+    "updated_at": "2026-06-01T12:00:00+08:00"
+  }
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `401` | 未登录或 session 中没有 `UID` |
+| `500` | 数据库查询异常 |
 
 ## 修改用户信息
 
@@ -1358,6 +1573,12 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
 3. 调用 `POST /api/v1/auth/register/sms`。
 4. 返回 `201` 时，新账号创建并登录完成。
 
+### 已登录状态下切换账号
+
+1. 调用 `GET /api/v1/auth/accounts` 获取当前手机号绑定的账号列表。
+2. 用户选择目标账号。
+3. 调用 `POST /api/v1/auth/switch` 切换，之后使用响应中新的 `mwu_sess_id`。
+
 ## 状态码速查
 
 | 状态码 | 含义 |
@@ -1366,7 +1587,7 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
 | `201` | 创建成功、注册成功或上传成功 |
 | `300` | 需要用户选择一个账号继续登录 |
 | `400` | 请求格式或参数错误 |
-| `403` | 验证失败、账号不匹配或账号状态不允许操作 |
+| `403` | 验证失败、账号不匹配、切换目标账号被封禁或账号状态不允许操作 |
 | `404` | 注册新账号时，该手机号还没有首个账号 |
 | `413` | 上传文件过大 |
 | `503` | 文件存储服务不可用 |

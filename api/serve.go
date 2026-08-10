@@ -46,8 +46,18 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	authGroup.Post("/login/choose", func(c fiber.Ctx) error {
 		return login.ChooseUserHandler(c, servants)
 	})
+	// 账号切换：列表与切换接口不校验当前账号状态（账号被封禁也可以切换到同手机号下的其他正常账号）。
+	authGroup.Get("/accounts", func(c fiber.Ctx) error {
+		return login.AccountListHandler(c, servants)
+	})
+	authGroup.Post("/switch", func(c fiber.Ctx) error {
+		return login.SwitchAccountHandler(c, servants)
+	})
 	authGroup.Post("/register/sms", func(c fiber.Ctx) error {
 		return login.RegisterBySMSHandler(c, servants)
+	})
+	authGroup.Post("/logout", func(c fiber.Ctx) error {
+		return login.LogoutHandler(c, servants)
 	})
 
 	// ===== 动态组 /moment（需登录）=====
@@ -129,6 +139,9 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		})
 	userGroup.Get("/users/:uid/info", func(c fiber.Ctx) error {
 		return profile.GetUserInfoHandler(c, servants)
+	})
+	userGroup.Get("/me", func(c fiber.Ctx) error {
+		return profile.MeHandler(c, servants)
 	})
 	userGroup.Get("/users/:uid/following", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
 		func(c fiber.Ctx) error {

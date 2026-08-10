@@ -52,6 +52,8 @@ const (
 	OKRegisterAndLogin     MessageKey = "ok.register_and_login"
 	OKNewAccountAndLogin   MessageKey = "ok.new_account_and_login"
 	OKChooseLoginAccount   MessageKey = "ok.choose_login_account"
+	OKAccountList          MessageKey = "ok.account_list"
+	OKLogout               MessageKey = "ok.logout"
 	OKUserInfoUpdated      MessageKey = "ok.user_info_updated"
 	OKFileUploaded         MessageKey = "ok.file_uploaded"
 	OKFileTempLink         MessageKey = "ok.file_temp_link"
@@ -409,6 +411,8 @@ func resetCatalog() {
 			OKRegisterAndLogin:     {Other: "注册并登录成功"},
 			OKNewAccountAndLogin:   {Other: "新账号注册并登录成功"},
 			OKChooseLoginAccount:   {Other: "请选择要登录的账号"},
+			OKAccountList:          {Other: "获取成功"},
+			OKLogout:               {Other: "退出登录成功"},
 			OKUserInfoUpdated:      {Other: "用户信息修改成功"},
 			OKMomentPublished:      {Other: "发布成功"},
 			OKBlockUpdated:         {Other: "操作成功"},
