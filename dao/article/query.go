@@ -168,6 +168,15 @@ func (d *ArticleDAO) QueryMetadatasByIDs(ids []uint64) ([]modelarticle.Metadata,
 	return list, err
 }
 
+// QueryBodyByMeta 按元数据中的 MongoID 查询正文（只查 MongoDB）。
+// 用于分段拉取等已有元数据的场景，避免重复回查 MySQL 元数据。
+func (d *ArticleDAO) QueryBodyByMeta(ctx context.Context, meta *modelarticle.Metadata) (*modelarticle.Article, error) {
+	if meta == nil || meta.MongoID == "" {
+		return nil, ErrArticleBodyMissing
+	}
+	return d.queryBodyByMongoID(ctx, meta.MongoID)
+}
+
 // queryBodyByMongoID 按 MongoDB _id 查询文章正文。
 // 仅内部使用：正文查询一律以元数据为入口，保证返回内容必带元数据。
 func (d *ArticleDAO) queryBodyByMongoID(ctx context.Context, mongoID string) (*modelarticle.Article, error) {

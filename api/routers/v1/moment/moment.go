@@ -40,7 +40,7 @@ func PublishHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	return resp.MomentPublished(ctx, Moment.ToMomentInfo(created))
 }
 
-// DetailHandler 获取动态详情。拉黑/被拉黑校验由 RequireNoBlock 中间件完成（40301），
+// DetailHandler 获取动态详情。内容屏蔽校验由 RequireNoContentBlock、拉黑/被拉黑校验由 RequireNoBlockUser 中间件完成（40301），
 // 动态存在性与状态校验由 ResolveMomentPathAuthor 完成（404），
 // 此处仅做可见性（permission）校验与详情组装。
 // 未登录用户仅可查看公开（permission=0）动态，互动状态字段恒为 false。

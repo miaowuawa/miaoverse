@@ -69,20 +69,23 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	})
 	// 给动态点赞。接口按内容类型（/moment/...）划分，后续文章等类型使用各自的子路径。
 	momentGroup.Post("/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.LikeHandler(c, servants)
 		})
 
 	// 动态详情（无需登录）：未登录用户仅可查看公开动态；登录用户按可见性规则查看。
-	// 拉黑/被拉黑任意一方存在时拒绝（40301）；动态不存在或不可见返回 404。
-	v1.Get("/moments/:id", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{
-		Resolver:       middleware.ResolveMomentPathAuthor,
-		AllowSelf:      true,
-		AllowAnonymous: true,
-	}), func(c fiber.Ctx) error {
-		return usermoment.DetailHandler(c, servants)
-	})
+	// 内容被屏蔽返回 451（45101）；拉黑/被拉黑任意一方存在时拒绝（40301）；动态不存在或不可见返回 404。
+	v1.Get("/moments/:id",
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentPathAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{
+			Resolver:       middleware.ResolveMomentPathAuthor,
+			AllowSelf:      true,
+			AllowAnonymous: true,
+		}), func(c fiber.Ctx) error {
+			return usermoment.DetailHandler(c, servants)
+		})
 
 	// ===== 评论组 /comment（需登录）=====
 	// 接口按被评论的内容类型划分子路径（/comment/moments、后续 /comment/articles），
@@ -91,21 +94,24 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	commentGroup.Use(middleware.RequireUser(servants, UserCheck.AccountActive()))
 	// 评论动态
 	commentGroup.Post("/moments", middleware.RequireNotPunished(servants, consts.PermComment),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return usercomment.CreateHandler(c, servants)
 		})
-	// 回复动态下的评论（楼中楼）：先校验与动态作者的拉黑关系，再校验与被回复评论作者的拉黑关系。
+	// 回复动态下的评论（楼中楼）：先校验内容是否被屏蔽，再校验与动态作者的拉黑关系，再校验与被回复评论作者的拉黑关系。
 	commentGroup.Post("/moments/:id/replies", middleware.RequireNotPunished(servants, consts.PermComment),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor, AllowSelf: true}),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentAuthor, AllowSelf: true}),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor, AllowSelf: true}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return usercomment.ReplyHandler(c, servants)
 		})
 	// 获取楼中楼完整对话（传入楼中楼首条评论 id）。
 	commentGroup.Get("/moments/:id/conversation",
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor, AllowSelf: true}),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentAuthor, AllowSelf: true}),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor, AllowSelf: true}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return usercomment.ConversationHandler(c, servants)
 		})
@@ -129,7 +135,7 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		return userfile.SharedTempLinkHandler(c, servants)
 	})
 	userGroup.Post("/follows", middleware.RequireNotPunished(servants, consts.PermSocial),
-		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{BodyField: "target", CheckMuteUnwatch: true}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{BodyField: "target", CheckMuteUnwatch: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.FollowHandler(c, servants)
 		})
@@ -139,11 +145,11 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	userGroup.Post("/blocks", func(c fiber.Ctx) error {
 		return userblock.UpdateHandler(c, servants)
 	})
-	userGroup.Get("/users/:uid/contents/count", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+	userGroup.Get("/users/:uid/contents/count", middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
 		func(c fiber.Ctx) error {
 			return usercontent.CountHandler(c, servants)
 		})
-	userGroup.Get("/users/:uid/contents", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+	userGroup.Get("/users/:uid/contents", middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
 		func(c fiber.Ctx) error {
 			return usercontent.ListHandler(c, servants)
 		})
@@ -153,11 +159,11 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	userGroup.Get("/me", func(c fiber.Ctx) error {
 		return profile.MeHandler(c, servants)
 	})
-	userGroup.Get("/users/:uid/following", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+	userGroup.Get("/users/:uid/following", middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
 		func(c fiber.Ctx) error {
 			return userrelation.FollowingHandler(c, servants)
 		})
-	userGroup.Get("/users/:uid/followers", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
+	userGroup.Get("/users/:uid/followers", middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{PathParam: "uid"}),
 		func(c fiber.Ctx) error {
 			return userrelation.FollowersHandler(c, servants)
 		})

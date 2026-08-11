@@ -16,7 +16,7 @@ import (
 	"miaoverse/util/pagination"
 )
 
-// CreateHandler 给动态发送评论。拉黑校验由 RequireNoBlock 中间件完成，评论权限在此校验。
+// CreateHandler 给动态发送评论。内容屏蔽校验由 RequireNoContentBlock、拉黑校验由 RequireNoBlockUser 中间件完成，评论权限在此校验。
 func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
@@ -60,7 +60,7 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	return resp.CommentCreated(ctx, toCommentInfo(created, moment.ID))
 }
 
-// ReplyHandler 回复动态下的评论（楼中楼）。拉黑/被拉黑校验由 RequireNoBlock 中间件完成，
+// ReplyHandler 回复动态下的评论（楼中楼）。内容屏蔽校验由 RequireNoContentBlock、拉黑/被拉黑校验由 RequireNoBlockUser 中间件完成，
 // 评论权限按所属动态的评论权限校验，并写入互动记录（type=reply）。
 func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)

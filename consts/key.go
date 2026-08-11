@@ -12,6 +12,7 @@ const (
 	BlockMomentLocalKey  = "miaoverse.block.moment"
 	BlockCommentLocalKey = "miaoverse.block.comment"
 	BlockCommentRootKey  = "miaoverse.block.comment.root"
+	BlockArticleMetaKey  = "miaoverse.block.article.meta"
 )
 
 const (

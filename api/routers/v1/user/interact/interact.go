@@ -8,7 +8,7 @@ import (
 	"miaoverse/model/server"
 )
 
-// FollowHandler 关注用户。拉黑/屏蔽/不想看校验由 RequireNoBlock 中间件完成。
+// FollowHandler 关注用户。拉黑/屏蔽/不想看校验由 RequireNoBlockUser 中间件完成。
 func FollowHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
@@ -27,7 +27,7 @@ func FollowHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	return resp.InteractOK(ctx, uint64(targetID), consts.ActionFollow)
 }
 
-// LikeHandler 给动态点赞。拉黑校验由 RequireNoBlock 中间件完成。
+// LikeHandler 给动态点赞。内容屏蔽校验由 RequireNoContentBlock、拉黑校验由 RequireNoBlockUser 中间件完成。
 func LikeHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {

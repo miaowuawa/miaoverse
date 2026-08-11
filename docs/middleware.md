@@ -75,10 +75,10 @@ userGroup.Post(
 ## 拉黑校验中间件
 
 ```go
-middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{...})
+middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{...})
 ```
 
-用于校验当前登录用户与目标用户之间不存在任意一方的拉黑关系（拉黑或被拉黑均拒绝，body `code` 为 `40301`）。
+用于校验当前登录用户与目标用户之间不存在任意一方的拉黑关系（拉黑或被拉黑均拒绝，body `code` 为 `40301`）。只负责拉黑关系判定，内容是否被屏蔽由 `RequireNoContentBlock` 负责。
 
 目标用户 ID 的解析方式（三选一）：
 
@@ -94,9 +94,17 @@ middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{...})
 - `AllowSelf`：允许目标为自己（如回复自己的评论、评论自己的动态）；默认 `false`。
 - `AllowAnonymous`：允许未登录访问。未登录请求跳过拉黑校验直接放行（Resolver 仍会执行并缓存业务对象），用于公开内容详情等场景；默认 `false`。
 
-Resolver 返回错误时：
+## 内容屏蔽校验中间件
 
-- `errBlockTargetBlocked`：目标内容被屏蔽（动态/评论等 `*StatusBlocked` 状态），返回 HTTP `451`，body `code` 为 `45101`（见 `API-errors.md`）。
+```go
+middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{...})
+```
+
+用于校验目标内容未被标记为屏蔽状态（动态/评论等 `*StatusBlocked`，如违规内容），被屏蔽时返回 HTTP `451`，body `code` 为 `45101`（见 `API-errors.md`）。Resolver 解析出的内容对象会缓存（`BlockMoment`/`BlockComment`），handler 可复用避免重复查询。
+
+Resolver 返回错误时（两个中间件共用同一映射）：
+
+- `errContentBlocked`：目标内容被屏蔽（`*StatusBlocked` 状态），返回 HTTP `451`，body `code` 为 `45101`。
 - `errBlockTargetNotFound`：目标不存在或已删除，返回 `404`。
 - 其余错误：返回 `400`。
 
@@ -107,7 +115,7 @@ Resolver 返回错误时：
 - `ResolveCommentAuthor`：按路径参数 `:id` 查评论，返回评论作者 ID 并缓存评论对象（`BlockComment`）。用于「禁止回复拉黑/被拉黑的人的评论」。
 - `ResolveCommentMomentAuthor`：按路径参数 `:id` 查评论，沿 target 链上溯到所属动态，返回动态作者 ID，并缓存被回复评论、楼中楼首条评论（`BlockCommentRoot`）与动态对象（`BlockMoment`）。用于回复评论/楼中楼对话场景。
 
-多个 `RequireNoBlock` 可叠加，例如回复评论先校验与动态作者的拉黑关系，再校验与被回复评论作者的拉黑关系。
+多个中间件可叠加，例如回复评论先由 `RequireNoContentBlock` 校验内容是否被屏蔽，再由 `RequireNoBlockUser` 校验与动态作者、被回复评论作者的拉黑关系。Resolver 有缓存，叠加时不会重复查询。
 
 ## Referer 检测中间件
 

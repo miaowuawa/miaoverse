@@ -9,6 +9,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
 	"miaoverse/consts"
+	"miaoverse/dao/article"
+	modelarticle "miaoverse/model/dao/article"
 	modelinteracts "miaoverse/model/dao/interacts"
 	modelmoment "miaoverse/model/dao/moment"
 	"miaoverse/model/dto/resp"
@@ -19,7 +21,7 @@ import (
 var (
 	errBlockTargetMissing  = errors.New("block target is missing")
 	errBlockTargetNotFound = errors.New("block target not found")
-	errBlockTargetBlocked  = errors.New("block target is blocked content")
+	errContentBlocked      = errors.New("content is blocked")
 )
 
 // BlockTargetResolver 自定义目标用户 ID 解析器（如点赞/评论需先查动态再取作者）。
@@ -37,11 +39,11 @@ type BlockGuardConfig struct {
 	AllowAnonymous   bool // 允许未登录访问：跳过拉黑校验，但仍执行 Resolver 并缓存业务对象
 }
 
-// RequireNoBlock 拉黑校验中间件：查看者与目标用户存在任意一方拉黑关系时拒绝（40301）。
+// RequireNoBlockUser 拉黑校验中间件：查看者与目标用户存在任意一方拉黑关系时拒绝（40301）。
 // 目标用户 ID 来源：PathParam（如 /users/:uid/...）、BodyField（如 target）、或 Resolver。
 // AllowAnonymous 为 true 时，未登录请求跳过拉黑校验直接放行（Resolver 仍会执行并缓存业务对象）。
-// Resolver 返回 errBlockTargetBlocked（目标内容被屏蔽）时返回 451（45101）。
-func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Handler {
+// 注意：本中间件只负责拉黑关系判定，内容是否被屏蔽由 RequireNoContentBlock 负责。
+func RequireNoBlockUser(servants *server.Servants, config BlockGuardConfig) fiber.Handler {
 	return func(ctx fiber.Ctx) error {
 		uid, ok := CurrentUID(ctx)
 		if !ok {
@@ -88,11 +90,23 @@ func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Ha
 	}
 }
 
+// RequireNoContentBlock 内容屏蔽校验中间件：目标内容被标记为屏蔽状态（*StatusBlocked，如违规内容）时拒绝（45101）。
+// 目标内容由 Resolver 解析并缓存（BlockMoment/BlockComment），handler 可复用避免重复查询。
+// 内容不存在/已删除等非屏蔽状态由 Resolver 返回对应错误（404/400）。
+func RequireNoContentBlock(servants *server.Servants, config BlockGuardConfig) fiber.Handler {
+	return func(ctx fiber.Ctx) error {
+		if _, err := resolveBlockTarget(ctx, servants, config); err != nil {
+			return rejectResolveError(ctx, err)
+		}
+		return ctx.Next()
+	}
+}
+
 // rejectResolveError 将 Resolver 错误映射为 HTTP 响应：
 // 内容被屏蔽 → 451（45101）；目标不存在 → 404；其余 → 400。
 func rejectResolveError(ctx fiber.Ctx, err error) error {
 	switch {
-	case errors.Is(err, errBlockTargetBlocked):
+	case errors.Is(err, errContentBlocked):
 		return resp.ContentBlocked(ctx)
 	case errors.Is(err, errBlockTargetNotFound):
 		return resp.FileNotFound(ctx)
@@ -101,7 +115,7 @@ func rejectResolveError(ctx fiber.Ctx, err error) error {
 	}
 }
 
-// BlockTarget 读取 RequireNoBlock 解析出的目标用户 ID。
+// BlockTarget 读取 RequireNoBlockUser/RequireNoContentBlock 解析出的目标用户 ID。
 func BlockTarget(ctx fiber.Ctx) (uint32, bool) {
 	if v, ok := ctx.Locals(consts.BlockTargetLocalKey).(uint32); ok && v != 0 {
 		return v, true
@@ -109,7 +123,7 @@ func BlockTarget(ctx fiber.Ctx) (uint32, bool) {
 	return 0, false
 }
 
-// BlockMoment 读取 RequireNoBlock 的 Resolver 存入的动态对象（点赞/评论场景复用，避免重复查询）。
+// BlockMoment 读取 RequireNoContentBlock/RequireNoBlockUser 的 Resolver 存入的动态对象（点赞/评论场景复用，避免重复查询）。
 func BlockMoment(ctx fiber.Ctx) (*modelmoment.Moment, bool) {
 	if m, ok := ctx.Locals(consts.BlockMomentLocalKey).(*modelmoment.Moment); ok && m != nil {
 		return m, true
@@ -117,7 +131,7 @@ func BlockMoment(ctx fiber.Ctx) (*modelmoment.Moment, bool) {
 	return nil, false
 }
 
-// BlockComment 读取 RequireNoBlock 的 Resolver 存入的被回复评论对象（回复评论/楼中楼对话场景）。
+// BlockComment 读取 RequireNoContentBlock/RequireNoBlockUser 的 Resolver 存入的被回复评论对象（回复评论/楼中楼对话场景）。
 func BlockComment(ctx fiber.Ctx) (*modelinteracts.Comment, bool) {
 	if c, ok := ctx.Locals(consts.BlockCommentLocalKey).(*modelinteracts.Comment); ok && c != nil {
 		return c, true
@@ -125,7 +139,7 @@ func BlockComment(ctx fiber.Ctx) (*modelinteracts.Comment, bool) {
 	return nil, false
 }
 
-// BlockCommentRoot 读取 RequireNoBlock 的 Resolver 存入的楼中楼首条评论对象（用于互动记录 reference_id）。
+// BlockCommentRoot 读取 RequireNoContentBlock/RequireNoBlockUser 的 Resolver 存入的楼中楼首条评论对象（用于互动记录 reference_id）。
 func BlockCommentRoot(ctx fiber.Ctx) (*modelinteracts.Comment, bool) {
 	if c, ok := ctx.Locals(consts.BlockCommentRootKey).(*modelinteracts.Comment); ok && c != nil {
 		return c, true
@@ -134,7 +148,7 @@ func BlockCommentRoot(ctx fiber.Ctx) (*modelinteracts.Comment, bool) {
 }
 
 // ResolveMomentAuthor 点赞/评论场景的目标解析器：按 body 中 moment_id 查动态，返回作者 ID 并缓存动态对象。
-// 动态被屏蔽（MomentStatusBlocked）时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
+// 动态被屏蔽（MomentStatusBlocked）时返回 errContentBlocked（45101），删除/草稿等视为不存在。
 func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
 	var body struct {
 		MomentID uint64 `json:"moment_id"`
@@ -148,7 +162,7 @@ func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, erro
 		return 0, errBlockTargetMissing
 	}
 	if moment.Status == consts.MomentStatusBlocked {
-		return 0, errBlockTargetBlocked
+		return 0, errContentBlocked
 	}
 	if moment.Status != consts.MomentStatusNormal {
 		return 0, errBlockTargetMissing
@@ -160,7 +174,7 @@ func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, erro
 
 // ResolveMomentPathAuthor 动态详情场景的目标解析器：按路径参数 :id 查动态，
 // 返回作者 ID 并缓存动态对象（handler 复用，避免重复查询）。
-// 动态被屏蔽（MomentStatusBlocked）时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
+// 动态被屏蔽（MomentStatusBlocked）时返回 errContentBlocked（45101），删除/草稿等视为不存在。
 func ResolveMomentPathAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
 	if moment, ok := BlockMoment(ctx); ok {
 		return moment.UserID, nil
@@ -178,7 +192,7 @@ func ResolveMomentPathAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, 
 		return 0, errBlockTargetMissing
 	}
 	if moment.Status == consts.MomentStatusBlocked {
-		return 0, errBlockTargetBlocked
+		return 0, errContentBlocked
 	}
 	if moment.Status != consts.MomentStatusNormal {
 		return 0, errBlockTargetNotFound
@@ -186,6 +200,44 @@ func ResolveMomentPathAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, 
 
 	ctx.Locals(consts.BlockMomentLocalKey, moment)
 	return moment.UserID, nil
+}
+
+// BlockArticleMeta 读取 RequireNoContentBlock/RequireNoBlockUser 的 Resolver 存入的文章元数据（详情/分段接口复用，避免重复查询）。
+func BlockArticleMeta(ctx fiber.Ctx) (*modelarticle.Metadata, bool) {
+	if m, ok := ctx.Locals(consts.BlockArticleMetaKey).(*modelarticle.Metadata); ok && m != nil {
+		return m, true
+	}
+	return nil, false
+}
+
+// ResolveArticlePathAuthor 文章详情/正文分段场景的目标解析器：按路径参数 :id 查文章元数据，
+// 返回作者 ID 并缓存元数据对象（handler 复用，避免重复查询）。
+// 文章被屏蔽（ArticleStatusBlocked）时返回 errContentBlocked（45101），删除/草稿等视为不存在（404）。
+func ResolveArticlePathAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
+	if meta, ok := BlockArticleMeta(ctx); ok {
+		return meta.UserID, nil
+	}
+
+	id, err := strconv.ParseUint(strings.TrimSpace(ctx.Params("id")), 10, 64)
+	if err != nil || id == 0 {
+		return 0, errBlockTargetMissing
+	}
+	meta, err := servants.ArticleServant.QueryMetadataByID(id)
+	if err != nil {
+		if errors.Is(err, article.ErrArticleNotFound) {
+			return 0, errBlockTargetNotFound
+		}
+		return 0, errBlockTargetMissing
+	}
+	if meta.Status == consts.ArticleStatusBlocked {
+		return 0, errContentBlocked
+	}
+	if meta.Status != consts.ArticleStatusNormal {
+		return 0, errBlockTargetNotFound
+	}
+
+	ctx.Locals(consts.BlockArticleMetaKey, meta)
+	return meta.UserID, nil
 }
 
 // ResolveCommentAuthor 回复评论/楼中楼对话场景的目标解析器：按路径参数 :id 查评论，返回评论作者 ID 并缓存评论对象。
@@ -215,8 +267,8 @@ func ResolveCommentMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint3
 }
 
 // loadCommentByPathID 从路径参数 :id 解析评论，校验存在且状态正常，并缓存评论对象。
-// 评论被屏蔽（CommentStatusBlocked）时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
-// 已缓存时直接复用（RequireNoBlock 可叠加多个 Resolver 时避免重复查询）。
+// 评论被屏蔽（CommentStatusBlocked）时返回 errContentBlocked（45101），删除/草稿等视为不存在。
+// 已缓存时直接复用（多个中间件叠加时避免重复查询）。
 func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelinteracts.Comment, error) {
 	if comment, ok := BlockComment(ctx); ok {
 		return comment, nil
@@ -234,7 +286,7 @@ func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelintera
 		return nil, errBlockTargetMissing
 	}
 	if comment.Status == consts.CommentStatusBlocked {
-		return nil, errBlockTargetBlocked
+		return nil, errContentBlocked
 	}
 	if comment.Status != consts.CommentStatusNormal {
 		return nil, errBlockTargetNotFound
@@ -246,7 +298,7 @@ func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelintera
 
 // resolveCommentRoot 沿评论 target 链上溯：找到楼中楼首条评论与所属动态。
 // 评论本身 target_type=moment 时，该评论即首条评论。
-// 上溯链上的任意评论或所属动态被屏蔽时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
+// 上溯链上的任意评论或所属动态被屏蔽时返回 errContentBlocked（45101），删除/草稿等视为不存在。
 func resolveCommentRoot(comment *modelinteracts.Comment, servants *server.Servants) (*modelinteracts.Comment, *modelmoment.Moment, error) {
 	root := comment
 	for depth := 0; depth < consts.CommentChainMaxDepth; depth++ {
@@ -259,7 +311,7 @@ func resolveCommentRoot(comment *modelinteracts.Comment, servants *server.Servan
 				return nil, nil, errBlockTargetMissing
 			}
 			if moment.Status == consts.MomentStatusBlocked {
-				return nil, nil, errBlockTargetBlocked
+				return nil, nil, errContentBlocked
 			}
 			if moment.Status != consts.MomentStatusNormal {
 				return nil, nil, errBlockTargetNotFound
@@ -277,7 +329,7 @@ func resolveCommentRoot(comment *modelinteracts.Comment, servants *server.Servan
 			return nil, nil, errBlockTargetMissing
 		}
 		if parent.Status == consts.CommentStatusBlocked {
-			return nil, nil, errBlockTargetBlocked
+			return nil, nil, errContentBlocked
 		}
 		if parent.Status != consts.CommentStatusNormal {
 			return nil, nil, errBlockTargetNotFound

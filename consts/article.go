@@ -26,6 +26,14 @@ const (
 	MaxArticleChapterID      = 10000 // 章节号上限（防止异常章节号）
 )
 
+// 文章详情/正文访问限制。
+const (
+	AnonymousContentRatio    = 60  // 未登录可见正文百分比（60%）
+	AnonymousNovelMaxChapter = 2   // 未登录小说最多可看的章节数（含第 2 章）
+	ArticleSegmentSize       = 100 // 单个正文分段最大长度（千字），超出需分段拉取
+	ArticleSegmentsMaxSeq    = 999 // 分段序号上限，防异常请求
+)
+
 // ArticleMongoCollection MongoDB 中文章正文档集合名
 const ArticleMongoCollection = "article"
 

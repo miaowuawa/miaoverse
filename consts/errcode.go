@@ -13,3 +13,9 @@ const (
 const (
 	ContentBlocked = 45101 // 内容被屏蔽（动态/评论/文章等被标记为屏蔽状态），无法查看
 )
+
+// 2xx 成功响应下的业务码：HTTP 状态码仍为 200，客户端通过 body.code 识别细分语义。
+const (
+	NeedLoginFullContent = 20001 // 未登录只能查看文章前 60% / 小说前 2 章，登录后查看完整内容
+	ArticleNeedSegments  = 20006 // 文章过长，需使用分段接口（/articles/:id/segments/:seq）拉取正文
+)
