@@ -111,6 +111,16 @@ func MomentPublished(ctx fiber.Ctx, moment MomentInfo) error {
 	})
 }
 
+// MomentDetailOK 返回动态详情，已注销作者的展示字段统一打码，避免泄露注销前的用户名与签名。
+func MomentDetailOK(ctx fiber.Ctx, detail MomentDetail) error {
+	MaskClosedAccount(ctx, &detail.Author)
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgMomentDetail{
+		Code:   fiber.StatusOK,
+		Msg:    i18n.Message(ctx, i18n.OKMomentDetailFetched),
+		Moment: detail,
+	})
+}
+
 func BlockUpdated(ctx fiber.Ctx, target uint32, blockType uint8, action string) error {
 	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgBlock{
 		Code:   fiber.StatusOK,

@@ -9,7 +9,7 @@
 | 分组 | 前缀 | 是否需要登录 | 内容 |
 | --- | --- | --- | --- |
 | 认证 | `/api/v1/auth` | 否（账号列表/切换需登录） | 短信验证码、登录、注册、切换账号 |
-| 动态 | `/api/v1/moment` | 是 | 发布动态、给动态点赞 |
+| 动态 | `/api/v1/moment` | 是 | 发布动态、获取动态详情、给动态点赞 |
 | 评论 | `/api/v1/comment` | 是 | 评论动态、回复评论（楼中楼）、获取楼中楼对话。按被评论内容类型划分子路径（`/comment/moments`，后续文章为 `/comment/articles`） |
 | 用户 | `/api/v1/user` | 是 | 资料、文件、关注、拉黑/屏蔽/不想看、惩罚记录、查看他人资料/内容/关系 |
 
@@ -904,6 +904,103 @@ curl -i -X POST http://localhost:3000/api/v1/moment \
 | `400` | 请求体不是 JSON、`content` 为空或超长、`status`/`permission`/`comment_permission`/`top` 取值非法（含设置全站置顶） |
 | `401` | 未登录或 session 中没有 `UID` |
 | `500` | 数据库写入异常 |
+
+## 获取动态详情
+
+### `GET /api/v1/moments/:id`
+
+获取指定动态的详情，包含动态本体、作者信息、互动计数以及当前登录用户对该动态的点赞/关注状态。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `id` | number | 是 | 动态 ID，大于 0 |
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/moments/1 \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "moment": {
+    "id": 1,
+    "user_id": 10001,
+    "title": "",
+    "content": "今天天气真好",
+    "status": 0,
+    "permission": 0,
+    "comment_permission": 0,
+    "top": 0,
+    "created_at": "2026-06-07T12:00:00+08:00",
+    "updated_at": "2026-06-07T12:00:00+08:00",
+    "author": {
+      "id": 10001,
+      "username": "miao",
+      "nickname": "喵",
+      "region": 86,
+      "avatar": "",
+      "bio": "",
+      "gender": 0,
+      "status": 1,
+      "created_at": "2026-06-01T12:00:00+08:00",
+      "updated_at": "2026-06-01T12:00:00+08:00"
+    },
+    "stats": {
+      "likes": 5,
+      "comments": 3,
+      "shares": 0
+    },
+    "is_liked": false,
+    "is_following": false
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `moment` | object | 动态详情 |
+| `moment.author` | object | 作者公开资料；作者已注销时 `username`/`bio` 为固定打码文案 |
+| `moment.stats` | object | 互动计数：`likes` 点赞数、`comments` 评论数、`shares` 分享数 |
+| `moment.is_liked` | boolean | 当前登录用户是否已点赞该动态 |
+| `moment.is_following` | boolean | 当前登录用户是否已关注作者 |
+
+#### 可见性规则
+
+与内容列表一致：
+
+- 公开（`permission=0`）动态对所有人可见。
+- 仅好友（`permission=1`）动态仅对互相关注的查看者可见。
+- 仅粉丝（`permission=3`）动态仅对目标用户关注了的查看者可见。
+- 仅自己（`permission=2`）动态仅本人可见。
+- 草稿、已删除等非正常状态动态不返回。
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `id` 非法（非数字或为 0） |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 查看者与动态作者存在任意一方的拉黑关系，body 中 `code` 为 `40301`（见 `API-errors.md`） |
+| `404` | 动态不存在、已删除/草稿等非正常状态，或对当前用户不可见 |
+| `500` | 数据库查询异常 |
 
 ## 拉黑/屏蔽/不想看
 

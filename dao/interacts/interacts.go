@@ -135,6 +135,16 @@ func (d *InteractsDAO) IsFollowing(userFrom uint32, userTo uint32) (bool, error)
 	return count > 0, err
 }
 
+// HasLikedMoment 查询 userID 是否已点赞该动态（type=like, target_type=moment, status=normal）
+func (d *InteractsDAO) HasLikedMoment(userID uint32, momentID uint64) (bool, error) {
+	var count int64
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Where("user_from = ? AND target_id = ? AND type = ? AND target_type = ? AND status = ?",
+			userID, momentID, consts.InteractTypeLike, consts.InteractTargetMoment, consts.InteractStatusNormal).
+		Count(&count).Error
+	return count > 0, err
+}
+
 // CountFollowing 统计 userID 正在关注的用户数量
 func (d *InteractsDAO) CountFollowing(userID uint32) (int64, error) {
 	var count int64

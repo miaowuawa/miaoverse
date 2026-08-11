@@ -67,6 +67,11 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	momentGroup.Post("/", middleware.RequireNotPunished(servants, consts.PermPost), func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
 	})
+	// 动态详情：拉黑/被拉黑任意一方存在时拒绝（40301）；动态不存在或不可见返回 404。
+	momentGroup.Get("/moments/:id", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentPathAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return usermoment.DetailHandler(c, servants)
+		})
 	// 给动态点赞。接口按内容类型（/moment/...）划分，后续文章等类型使用各自的子路径。
 	momentGroup.Post("/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),

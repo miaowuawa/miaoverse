@@ -61,6 +61,7 @@ const (
 	OKFileUploaded         MessageKey = "ok.file_uploaded"
 	OKFileTempLink         MessageKey = "ok.file_temp_link"
 	OKMomentPublished      MessageKey = "ok.moment_published"
+	OKMomentDetailFetched  MessageKey = "ok.moment_detail_fetched"
 	OKBlockUpdated         MessageKey = "ok.block_updated"
 	OKContentList          MessageKey = "ok.content_list"
 	OKUserInfoFetched      MessageKey = "ok.user_info_fetched"
@@ -421,6 +422,7 @@ func resetCatalog() {
 			OKLogout:               {Other: "退出登录成功"},
 			OKUserInfoUpdated:      {Other: "用户信息修改成功"},
 			OKMomentPublished:      {Other: "发布成功"},
+			OKMomentDetailFetched:  {Other: "获取成功"},
 			OKBlockUpdated:         {Other: "操作成功"},
 			OKContentList:          {Other: "获取成功"},
 			OKUserInfoFetched:      {Other: "获取成功"},

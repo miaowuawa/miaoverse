@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
+	"gorm.io/gorm"
 	"miaoverse/consts"
 	modelinteracts "miaoverse/model/dao/interacts"
 	modelmoment "miaoverse/model/dao/moment"
@@ -15,7 +16,10 @@ import (
 	"miaoverse/service/UserBlock"
 )
 
-var errBlockTargetMissing = errors.New("block target is missing")
+var (
+	errBlockTargetMissing  = errors.New("block target is missing")
+	errBlockTargetNotFound = errors.New("block target not found")
+)
 
 // BlockTargetResolver 自定义目标用户 ID 解析器（如点赞/评论需先查动态再取作者）。
 // 返回的 targetID 会写入 ctx.Locals，handler 可通过 BlockTarget(ctx) 复用。
@@ -42,6 +46,9 @@ func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Ha
 
 		targetID, err := resolveBlockTarget(ctx, servants, config)
 		if err != nil {
+			if errors.Is(err, errBlockTargetNotFound) {
+				return resp.FileNotFound(ctx)
+			}
 			return resp.BadRequest(ctx)
 		}
 		if targetID == 0 || (!config.AllowSelf && targetID == uid) {
@@ -120,6 +127,32 @@ func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, erro
 	}
 	if moment.Status != consts.MomentStatusNormal {
 		return 0, errBlockTargetMissing
+	}
+
+	ctx.Locals(consts.BlockMomentLocalKey, moment)
+	return moment.UserID, nil
+}
+
+// ResolveMomentPathAuthor 动态详情场景的目标解析器：按路径参数 :id 查动态，
+// 返回作者 ID 并缓存动态对象（handler 复用，避免重复查询）。非正常状态动态视为不存在。
+func ResolveMomentPathAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
+	if moment, ok := BlockMoment(ctx); ok {
+		return moment.UserID, nil
+	}
+
+	id, err := strconv.ParseUint(strings.TrimSpace(ctx.Params("id")), 10, 64)
+	if err != nil || id == 0 {
+		return 0, errBlockTargetMissing
+	}
+	moment, err := servants.ContentServant.QueryMomentByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, errBlockTargetNotFound
+		}
+		return 0, errBlockTargetMissing
+	}
+	if moment.Status != consts.MomentStatusNormal {
+		return 0, errBlockTargetNotFound
 	}
 
 	ctx.Locals(consts.BlockMomentLocalKey, moment)

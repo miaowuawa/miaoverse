@@ -5,6 +5,7 @@ import (
 
 	"miaoverse/consts"
 	modelmoment "miaoverse/model/dao/moment"
+	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/dto/moment/publishreq"
 	"miaoverse/model/dto/resp"
 )
@@ -84,4 +85,35 @@ func ToContentItem(m *modelmoment.Moment, metas map[uint64]modelmoment.MomentInt
 		item.Like = meta.LikeCount
 	}
 	return item
+}
+
+// ToMomentDetail 将动态组装为详情响应：动态本体 + 作者信息 + 互动计数 + 当前用户互动状态。
+// 作者查询失败时不阻断详情返回（作者字段为空，由 handler 决定是否降级），
+// 但要求作者信息存在才能返回完整详情，由调用方保证查询前置。
+func ToMomentDetail(m *modelmoment.Moment, author *modeluser.User, meta *modelmoment.MomentInteractCount, isLiked bool, isFollowing bool) resp.MomentDetail {
+	detail := resp.MomentDetail{
+		ID:                m.ID,
+		UserID:            m.UserID,
+		Title:             m.Title,
+		Content:           m.Content,
+		Status:            m.Status,
+		Permission:        m.Permission,
+		CommentPermission: m.CommentPermission,
+		Top:               m.Top,
+		CreatedAt:         m.CreatedAt,
+		UpdatedAt:         m.UpdatedAt,
+		IsLiked:           isLiked,
+		IsFollowing:       isFollowing,
+	}
+	if author != nil {
+		detail.Author = *author
+	}
+	if meta != nil {
+		detail.Stats = resp.MomentStats{
+			Likes:    meta.LikeCount,
+			Comments: meta.CommentCount,
+			Shares:   meta.ShareCount,
+		}
+	}
+	return detail
 }
