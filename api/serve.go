@@ -26,8 +26,8 @@ func Initial(app *fiber.App, servants *server.Servants) {
 
 	// 健康检查
 	app.Get("/", func(c fiber.Ctx) error {
-		time := time.Now().Format("2006-01-02 15:04:05")
-		return c.SendString("Miaoverse Content/User API Resp at " + time)
+		timeNow := time.Now().Format("2006-01-02 15:04:05")
+		return c.SendString("Miaoverse Content/User API Resp at " + timeNow)
 	})
 
 	// API 路由组
