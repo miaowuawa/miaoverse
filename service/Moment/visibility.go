@@ -1,4 +1,4 @@
-package UserMoment
+package Moment
 
 import (
 	"errors"

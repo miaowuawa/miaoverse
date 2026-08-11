@@ -33,14 +33,26 @@ type BlockGuardConfig struct {
 	Resolver         BlockTargetResolver
 	CheckMuteUnwatch bool // 额外校验目标被自己屏蔽/不想看（关注场景）
 	AllowSelf        bool // 允许目标为自己（如回复自己的评论、评论自己的动态）
+	AllowAnonymous   bool // 允许未登录访问：跳过拉黑校验，但仍执行 Resolver 并缓存业务对象
 }
 
 // RequireNoBlock 拉黑校验中间件：查看者与目标用户存在任意一方拉黑关系时拒绝（40301）。
 // 目标用户 ID 来源：PathParam（如 /users/:uid/...）、BodyField（如 target）、或 Resolver。
+// AllowAnonymous 为 true 时，未登录请求跳过拉黑校验直接放行（Resolver 仍会执行并缓存业务对象）。
 func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Handler {
 	return func(ctx fiber.Ctx) error {
 		uid, ok := CurrentUID(ctx)
 		if !ok {
+			if config.AllowAnonymous {
+				// 匿名访问：无身份可判定拉黑关系，仅解析并缓存业务对象后放行
+				if _, err := resolveBlockTarget(ctx, servants, config); err != nil {
+					if errors.Is(err, errBlockTargetNotFound) {
+						return resp.FileNotFound(ctx)
+					}
+					return resp.BadRequest(ctx)
+				}
+				return ctx.Next()
+			}
 			return resp.Unauthorized(ctx)
 		}
 

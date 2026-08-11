@@ -67,17 +67,22 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	momentGroup.Post("/", middleware.RequireNotPunished(servants, consts.PermPost), func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
 	})
-	// 动态详情：拉黑/被拉黑任意一方存在时拒绝（40301）；动态不存在或不可见返回 404。
-	momentGroup.Get("/moments/:id", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentPathAuthor, AllowSelf: true}),
-		func(c fiber.Ctx) error {
-			return usermoment.DetailHandler(c, servants)
-		})
 	// 给动态点赞。接口按内容类型（/moment/...）划分，后续文章等类型使用各自的子路径。
 	momentGroup.Post("/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
 		middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.LikeHandler(c, servants)
 		})
+
+	// 动态详情（无需登录）：未登录用户仅可查看公开动态；登录用户按可见性规则查看。
+	// 拉黑/被拉黑任意一方存在时拒绝（40301）；动态不存在或不可见返回 404。
+	v1.Get("/moments/:id", middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{
+		Resolver:       middleware.ResolveMomentPathAuthor,
+		AllowSelf:      true,
+		AllowAnonymous: true,
+	}), func(c fiber.Ctx) error {
+		return usermoment.DetailHandler(c, servants)
+	})
 
 	// ===== 评论组 /comment（需登录）=====
 	// 接口按被评论的内容类型划分子路径（/comment/moments、后续 /comment/articles），

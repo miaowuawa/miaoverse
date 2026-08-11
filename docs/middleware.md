@@ -92,6 +92,7 @@ middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{...})
 
 - `CheckMuteUnwatch`：额外校验目标被自己屏蔽/不想看（关注场景）。
 - `AllowSelf`：允许目标为自己（如回复自己的评论、评论自己的动态）；默认 `false`。
+- `AllowAnonymous`：允许未登录访问。未登录请求跳过拉黑校验直接放行（Resolver 仍会执行并缓存业务对象），用于公开内容详情等场景；默认 `false`。
 
 内置 Resolver：
 

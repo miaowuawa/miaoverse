@@ -9,7 +9,7 @@ import (
 	modelmoment "miaoverse/model/dao/moment"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
-	"miaoverse/service/UserMoment"
+	"miaoverse/service/Moment"
 	"miaoverse/util/pagination"
 )
 
@@ -70,7 +70,7 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	items := make([]resp.ContentItem, 0, len(moments))
 	for i := range moments {
-		items = append(items, UserMoment.ToContentItem(&moments[i], metas))
+		items = append(items, Moment.ToContentItem(&moments[i], metas))
 	}
 
 	return resp.ContentList(ctx, items)
