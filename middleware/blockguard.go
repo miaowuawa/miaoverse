@@ -19,6 +19,7 @@ import (
 var (
 	errBlockTargetMissing  = errors.New("block target is missing")
 	errBlockTargetNotFound = errors.New("block target not found")
+	errBlockTargetBlocked  = errors.New("block target is blocked content")
 )
 
 // BlockTargetResolver 自定义目标用户 ID 解析器（如点赞/评论需先查动态再取作者）。
@@ -39,6 +40,7 @@ type BlockGuardConfig struct {
 // RequireNoBlock 拉黑校验中间件：查看者与目标用户存在任意一方拉黑关系时拒绝（40301）。
 // 目标用户 ID 来源：PathParam（如 /users/:uid/...）、BodyField（如 target）、或 Resolver。
 // AllowAnonymous 为 true 时，未登录请求跳过拉黑校验直接放行（Resolver 仍会执行并缓存业务对象）。
+// Resolver 返回 errBlockTargetBlocked（目标内容被屏蔽）时返回 451（45101）。
 func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Handler {
 	return func(ctx fiber.Ctx) error {
 		uid, ok := CurrentUID(ctx)
@@ -46,10 +48,7 @@ func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Ha
 			if config.AllowAnonymous {
 				// 匿名访问：无身份可判定拉黑关系，仅解析并缓存业务对象后放行
 				if _, err := resolveBlockTarget(ctx, servants, config); err != nil {
-					if errors.Is(err, errBlockTargetNotFound) {
-						return resp.FileNotFound(ctx)
-					}
-					return resp.BadRequest(ctx)
+					return rejectResolveError(ctx, err)
 				}
 				return ctx.Next()
 			}
@@ -58,10 +57,7 @@ func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Ha
 
 		targetID, err := resolveBlockTarget(ctx, servants, config)
 		if err != nil {
-			if errors.Is(err, errBlockTargetNotFound) {
-				return resp.FileNotFound(ctx)
-			}
-			return resp.BadRequest(ctx)
+			return rejectResolveError(ctx, err)
 		}
 		if targetID == 0 || (!config.AllowSelf && targetID == uid) {
 			return resp.BadRequest(ctx)
@@ -89,6 +85,19 @@ func RequireNoBlock(servants *server.Servants, config BlockGuardConfig) fiber.Ha
 
 		ctx.Locals(consts.BlockTargetLocalKey, targetID)
 		return ctx.Next()
+	}
+}
+
+// rejectResolveError 将 Resolver 错误映射为 HTTP 响应：
+// 内容被屏蔽 → 451（45101）；目标不存在 → 404；其余 → 400。
+func rejectResolveError(ctx fiber.Ctx, err error) error {
+	switch {
+	case errors.Is(err, errBlockTargetBlocked):
+		return resp.ContentBlocked(ctx)
+	case errors.Is(err, errBlockTargetNotFound):
+		return resp.FileNotFound(ctx)
+	default:
+		return resp.BadRequest(ctx)
 	}
 }
 
@@ -125,6 +134,7 @@ func BlockCommentRoot(ctx fiber.Ctx) (*modelinteracts.Comment, bool) {
 }
 
 // ResolveMomentAuthor 点赞/评论场景的目标解析器：按 body 中 moment_id 查动态，返回作者 ID 并缓存动态对象。
+// 动态被屏蔽（MomentStatusBlocked）时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
 func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
 	var body struct {
 		MomentID uint64 `json:"moment_id"`
@@ -137,6 +147,9 @@ func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, erro
 	if err != nil {
 		return 0, errBlockTargetMissing
 	}
+	if moment.Status == consts.MomentStatusBlocked {
+		return 0, errBlockTargetBlocked
+	}
 	if moment.Status != consts.MomentStatusNormal {
 		return 0, errBlockTargetMissing
 	}
@@ -146,7 +159,8 @@ func ResolveMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, erro
 }
 
 // ResolveMomentPathAuthor 动态详情场景的目标解析器：按路径参数 :id 查动态，
-// 返回作者 ID 并缓存动态对象（handler 复用，避免重复查询）。非正常状态动态视为不存在。
+// 返回作者 ID 并缓存动态对象（handler 复用，避免重复查询）。
+// 动态被屏蔽（MomentStatusBlocked）时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
 func ResolveMomentPathAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
 	if moment, ok := BlockMoment(ctx); ok {
 		return moment.UserID, nil
@@ -162,6 +176,9 @@ func ResolveMomentPathAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, 
 			return 0, errBlockTargetNotFound
 		}
 		return 0, errBlockTargetMissing
+	}
+	if moment.Status == consts.MomentStatusBlocked {
+		return 0, errBlockTargetBlocked
 	}
 	if moment.Status != consts.MomentStatusNormal {
 		return 0, errBlockTargetNotFound
@@ -198,6 +215,7 @@ func ResolveCommentMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint3
 }
 
 // loadCommentByPathID 从路径参数 :id 解析评论，校验存在且状态正常，并缓存评论对象。
+// 评论被屏蔽（CommentStatusBlocked）时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
 // 已缓存时直接复用（RequireNoBlock 可叠加多个 Resolver 时避免重复查询）。
 func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelinteracts.Comment, error) {
 	if comment, ok := BlockComment(ctx); ok {
@@ -209,8 +227,17 @@ func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelintera
 		return nil, errBlockTargetMissing
 	}
 	comment, err := servants.InteractsServant.QueryCommentByID(id)
-	if err != nil || comment.Status != consts.CommentStatusNormal {
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errBlockTargetNotFound
+		}
 		return nil, errBlockTargetMissing
+	}
+	if comment.Status == consts.CommentStatusBlocked {
+		return nil, errBlockTargetBlocked
+	}
+	if comment.Status != consts.CommentStatusNormal {
+		return nil, errBlockTargetNotFound
 	}
 
 	ctx.Locals(consts.BlockCommentLocalKey, comment)
@@ -219,13 +246,23 @@ func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelintera
 
 // resolveCommentRoot 沿评论 target 链上溯：找到楼中楼首条评论与所属动态。
 // 评论本身 target_type=moment 时，该评论即首条评论。
+// 上溯链上的任意评论或所属动态被屏蔽时返回 errBlockTargetBlocked（45101），删除/草稿等视为不存在。
 func resolveCommentRoot(comment *modelinteracts.Comment, servants *server.Servants) (*modelinteracts.Comment, *modelmoment.Moment, error) {
 	root := comment
 	for depth := 0; depth < consts.CommentChainMaxDepth; depth++ {
 		if root.TargetType == consts.CommentTargetMoment {
 			moment, err := servants.ContentServant.QueryMomentByID(root.TargetID)
-			if err != nil || moment.Status != consts.MomentStatusNormal {
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil, nil, errBlockTargetNotFound
+				}
 				return nil, nil, errBlockTargetMissing
+			}
+			if moment.Status == consts.MomentStatusBlocked {
+				return nil, nil, errBlockTargetBlocked
+			}
+			if moment.Status != consts.MomentStatusNormal {
+				return nil, nil, errBlockTargetNotFound
 			}
 			return root, moment, nil
 		}
@@ -233,8 +270,17 @@ func resolveCommentRoot(comment *modelinteracts.Comment, servants *server.Servan
 			return nil, nil, errBlockTargetMissing
 		}
 		parent, err := servants.InteractsServant.QueryCommentByID(root.TargetID)
-		if err != nil || parent.Status != consts.CommentStatusNormal {
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, nil, errBlockTargetNotFound
+			}
 			return nil, nil, errBlockTargetMissing
+		}
+		if parent.Status == consts.CommentStatusBlocked {
+			return nil, nil, errBlockTargetBlocked
+		}
+		if parent.Status != consts.CommentStatusNormal {
+			return nil, nil, errBlockTargetNotFound
 		}
 		root = parent
 	}

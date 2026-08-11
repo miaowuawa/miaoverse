@@ -94,9 +94,16 @@ middleware.RequireNoBlock(servants, middleware.BlockGuardConfig{...})
 - `AllowSelf`：允许目标为自己（如回复自己的评论、评论自己的动态）；默认 `false`。
 - `AllowAnonymous`：允许未登录访问。未登录请求跳过拉黑校验直接放行（Resolver 仍会执行并缓存业务对象），用于公开内容详情等场景；默认 `false`。
 
+Resolver 返回错误时：
+
+- `errBlockTargetBlocked`：目标内容被屏蔽（动态/评论等 `*StatusBlocked` 状态），返回 HTTP `451`，body `code` 为 `45101`（见 `API-errors.md`）。
+- `errBlockTargetNotFound`：目标不存在或已删除，返回 `404`。
+- 其余错误：返回 `400`。
+
 内置 Resolver：
 
 - `ResolveMomentAuthor`：按 body 中 `moment_id` 查动态，返回作者 ID 并缓存动态对象（`BlockMoment`）。
+- `ResolveMomentPathAuthor`：按路径参数 `:id` 查动态，返回作者 ID 并缓存动态对象（`BlockMoment`）。用于动态详情等场景。
 - `ResolveCommentAuthor`：按路径参数 `:id` 查评论，返回评论作者 ID 并缓存评论对象（`BlockComment`）。用于「禁止回复拉黑/被拉黑的人的评论」。
 - `ResolveCommentMomentAuthor`：按路径参数 `:id` 查评论，沿 target 链上溯到所属动态，返回动态作者 ID，并缓存被回复评论、楼中楼首条评论（`BlockCommentRoot`）与动态对象（`BlockMoment`）。用于回复评论/楼中楼对话场景。
 

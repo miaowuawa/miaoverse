@@ -47,6 +47,15 @@ func TargetPunished(ctx fiber.Ctx) error {
 	})
 }
 
+// ContentBlocked 内容被屏蔽（标记为屏蔽状态，如违规内容）导致无法查看，
+// 使用 HTTP 451 Unavailable For Legal Reasons，body 中 code 为自定义业务错误码 45101。
+func ContentBlocked(ctx fiber.Ctx) error {
+	return ctx.Status(fiber.StatusUnavailableForLegalReasons).JSON(CodeWithMsg{
+		Code: consts.ContentBlocked,
+		Msg:  i18n.Message(ctx, i18n.ErrContentBlocked),
+	})
+}
+
 func BadRequest(ctx fiber.Ctx) error {
 	return JSON(ctx, fiber.StatusBadRequest, i18n.ErrBadRequest)
 }
