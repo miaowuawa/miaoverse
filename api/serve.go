@@ -1,6 +1,7 @@
 package api
 
 import (
+	userarticle "miaoverse/api/routers/v1/article"
 	usercontent "miaoverse/api/routers/v1/content"
 	usermoment "miaoverse/api/routers/v1/moment"
 	usercomment "miaoverse/api/routers/v1/moment/comment"
@@ -85,6 +86,28 @@ func Initial(app *fiber.App, servants *server.Servants) {
 			AllowAnonymous: true,
 		}), func(c fiber.Ctx) error {
 			return usermoment.DetailHandler(c, servants)
+		})
+
+	// 文章详情（无需登录）：未登录仅可查看正文前 60%（小说前 2 章），body code 20001；正文超长返回 20006 引导分段。
+	// 内容被屏蔽返回 451（45101）；拉黑/被拉黑任意一方存在时拒绝（40301）；文章不存在或非正常状态返回 404。
+	v1.Get("/articles/:id",
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveArticlePathAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{
+			Resolver:       middleware.ResolveArticlePathAuthor,
+			AllowSelf:      true,
+			AllowAnonymous: true,
+		}), func(c fiber.Ctx) error {
+			return userarticle.DetailHandler(c, servants)
+		})
+	// 文章正文分段（无需登录）：seq 从 1 起；未登录仅可拉取正文前 60%（小说前 2 章）范围内的分段。
+	v1.Get("/articles/:id/segments/:seq",
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveArticlePathAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{
+			Resolver:       middleware.ResolveArticlePathAuthor,
+			AllowSelf:      true,
+			AllowAnonymous: true,
+		}), func(c fiber.Ctx) error {
+			return userarticle.SegmentHandler(c, servants)
 		})
 
 	// ===== 评论组 /comment（需登录）=====

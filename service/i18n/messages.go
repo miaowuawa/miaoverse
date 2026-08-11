@@ -51,28 +51,32 @@ const (
 	UserClosedUsername MessageKey = "user.closed_username"
 	UserClosedBio      MessageKey = "user.closed_bio"
 
-	OKSMSSent              MessageKey = "ok.sms_sent"
-	OKLogin                MessageKey = "ok.login"
-	OKRegisterAndLogin     MessageKey = "ok.register_and_login"
-	OKNewAccountAndLogin   MessageKey = "ok.new_account_and_login"
-	OKChooseLoginAccount   MessageKey = "ok.choose_login_account"
-	OKAccountList          MessageKey = "ok.account_list"
-	OKLogout               MessageKey = "ok.logout"
-	OKUserInfoUpdated      MessageKey = "ok.user_info_updated"
-	OKFileUploaded         MessageKey = "ok.file_uploaded"
-	OKFileTempLink         MessageKey = "ok.file_temp_link"
-	OKMomentPublished      MessageKey = "ok.moment_published"
-	OKMomentDetailFetched  MessageKey = "ok.moment_detail_fetched"
-	OKBlockUpdated         MessageKey = "ok.block_updated"
-	OKContentList          MessageKey = "ok.content_list"
-	OKUserInfoFetched      MessageKey = "ok.user_info_fetched"
-	OKCommentCreated       MessageKey = "ok.comment_created"
-	OKReplyCreated         MessageKey = "ok.reply_created"
-	OKConversationFetched  MessageKey = "ok.conversation_fetched"
-	OKPunishmentsFetched   MessageKey = "ok.punishments_fetched"
-	OKRelationList         MessageKey = "ok.relation_list"
-	OKInteract             MessageKey = "ok.interact"
-	SMSActionLoginRegister MessageKey = "sms.action.login_register"
+	OKSMSSent               MessageKey = "ok.sms_sent"
+	OKLogin                 MessageKey = "ok.login"
+	OKRegisterAndLogin      MessageKey = "ok.register_and_login"
+	OKNewAccountAndLogin    MessageKey = "ok.new_account_and_login"
+	OKChooseLoginAccount    MessageKey = "ok.choose_login_account"
+	OKAccountList           MessageKey = "ok.account_list"
+	OKLogout                MessageKey = "ok.logout"
+	OKUserInfoUpdated       MessageKey = "ok.user_info_updated"
+	OKFileUploaded          MessageKey = "ok.file_uploaded"
+	OKFileTempLink          MessageKey = "ok.file_temp_link"
+	OKMomentPublished       MessageKey = "ok.moment_published"
+	OKMomentDetailFetched   MessageKey = "ok.moment_detail_fetched"
+	OKBlockUpdated          MessageKey = "ok.block_updated"
+	OKContentList           MessageKey = "ok.content_list"
+	OKUserInfoFetched       MessageKey = "ok.user_info_fetched"
+	OKCommentCreated        MessageKey = "ok.comment_created"
+	OKReplyCreated          MessageKey = "ok.reply_created"
+	OKConversationFetched   MessageKey = "ok.conversation_fetched"
+	OKPunishmentsFetched    MessageKey = "ok.punishments_fetched"
+	OKRelationList          MessageKey = "ok.relation_list"
+	OKInteract              MessageKey = "ok.interact"
+	OKArticleFetched        MessageKey = "ok.article_fetched"
+	OKArticleFetchedPartial MessageKey = "ok.article_fetched_partial"
+	OKArticleNeedSegments   MessageKey = "ok.article_need_segments"
+	OKArticleSegmentFetched MessageKey = "ok.article_segment_fetched"
+	SMSActionLoginRegister  MessageKey = "sms.action.login_register"
 )
 
 type Data map[string]any
@@ -415,26 +419,30 @@ func resetCatalog() {
 			UserClosedUsername: {Other: "已注销的账号"},
 			UserClosedBio:      {Other: "用户已注销。虽然我不知道 TA 在三次元过得好不好，但我替这个账号感谢你最后的回眸。 —— 站长留"},
 
-			OKSMSSent:              {Other: "发送成功"},
-			OKLogin:                {Other: "登录成功"},
-			OKRegisterAndLogin:     {Other: "注册并登录成功"},
-			OKNewAccountAndLogin:   {Other: "新账号注册并登录成功"},
-			OKChooseLoginAccount:   {Other: "请选择要登录的账号"},
-			OKAccountList:          {Other: "获取成功"},
-			OKLogout:               {Other: "退出登录成功"},
-			OKUserInfoUpdated:      {Other: "用户信息修改成功"},
-			OKMomentPublished:      {Other: "发布成功"},
-			OKMomentDetailFetched:  {Other: "获取成功"},
-			OKBlockUpdated:         {Other: "操作成功"},
-			OKContentList:          {Other: "获取成功"},
-			OKUserInfoFetched:      {Other: "获取成功"},
-			OKCommentCreated:       {Other: "评论成功"},
-			OKReplyCreated:         {Other: "回复成功"},
-			OKConversationFetched:  {Other: "获取成功"},
-			OKPunishmentsFetched:   {Other: "获取成功"},
-			OKRelationList:         {Other: "获取成功"},
-			OKInteract:             {Other: "操作成功"},
-			SMSActionLoginRegister: {Other: "登录或注册"},
+			OKSMSSent:               {Other: "发送成功"},
+			OKLogin:                 {Other: "登录成功"},
+			OKRegisterAndLogin:      {Other: "注册并登录成功"},
+			OKNewAccountAndLogin:    {Other: "新账号注册并登录成功"},
+			OKChooseLoginAccount:    {Other: "请选择要登录的账号"},
+			OKAccountList:           {Other: "获取成功"},
+			OKLogout:                {Other: "退出登录成功"},
+			OKUserInfoUpdated:       {Other: "用户信息修改成功"},
+			OKMomentPublished:       {Other: "发布成功"},
+			OKMomentDetailFetched:   {Other: "获取成功"},
+			OKBlockUpdated:          {Other: "操作成功"},
+			OKContentList:           {Other: "获取成功"},
+			OKUserInfoFetched:       {Other: "获取成功"},
+			OKCommentCreated:        {Other: "评论成功"},
+			OKReplyCreated:          {Other: "回复成功"},
+			OKConversationFetched:   {Other: "获取成功"},
+			OKPunishmentsFetched:    {Other: "获取成功"},
+			OKRelationList:          {Other: "获取成功"},
+			OKInteract:              {Other: "操作成功"},
+			OKArticleFetched:        {Other: "获取成功"},
+			OKArticleFetchedPartial: {Other: "登录后查看完整内容"},
+			OKArticleNeedSegments:   {Other: "文章过长，请使用分段接口获取正文"},
+			OKArticleSegmentFetched: {Other: "获取成功"},
+			SMSActionLoginRegister:  {Other: "登录或注册"},
 		},
 	}
 }

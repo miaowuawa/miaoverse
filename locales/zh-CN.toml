@@ -52,6 +52,10 @@ language = "zh-CN"
 "ok.punishments_fetched" = "获取成功"
 "ok.relation_list" = "获取成功"
 "ok.interact" = "操作成功"
+"ok.article_fetched" = "获取成功"
+"ok.article_fetched_partial" = "登录后查看完整内容"
+"ok.article_need_segments" = "文章过长，请使用分段接口获取正文"
+"ok.article_segment_fetched" = "获取成功"
 "sms.action.login_register" = "登录或注册"
 
 [plurals."example.items"]
