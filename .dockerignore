@@ -1,0 +1,10 @@
+.git
+.idea
+dist
+*.log
+config
+config.yaml
+config.yml
+scripts
+docs
+*.md

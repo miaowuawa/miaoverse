@@ -1,4 +1,3 @@
--- 数据库版本表：automigration 使用，记录已应用的迁移版本，禁止手动修改
 CREATE TABLE IF NOT EXISTS `schema_migrations` (
     `version` BIGINT UNSIGNED NOT NULL COMMENT 'migration version',
     `name` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'migration name',

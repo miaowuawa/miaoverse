@@ -112,6 +112,77 @@ func (s *Servant) IsBlockedEither(ctx context.Context, a uint32, b uint32) (bool
 	return s.Contains(ctx, b, BlockTypeBlock, a)
 }
 
+// IsFilteredBatch 批量判断 viewer 与每个 target 之间是否存在"拉黑/屏蔽/不想看"关系。
+// 返回 targetID → 是否被过滤 的 map；未命中任何关系的 target 不在 map 中。
+// 使用 Redis pipeline 一次往返完成全部查询，避免逐条 RTT。
+// 过滤口径：viewer 拉黑/屏蔽/不想看 target，或 target 拉黑 viewer（双向拉黑）。
+func (s *Servant) IsFilteredBatch(ctx context.Context, viewer uint32, targets []uint32) (map[uint32]bool, error) {
+	result := map[uint32]bool{}
+	if len(targets) == 0 {
+		return result, nil
+	}
+
+	// 去重，避免重复 key 查询
+	seen := make(map[uint32]bool, len(targets))
+	unique := make([]uint32, 0, len(targets))
+	for _, t := range targets {
+		if t == 0 || t == viewer || seen[t] {
+			continue
+		}
+		seen[t] = true
+		unique = append(unique, t)
+	}
+	if len(unique) == 0 {
+		return result, nil
+	}
+
+	// 每个 target 需要 4 次 Contains：viewer 的 3 种关系 + target 拉黑 viewer
+	keys := make([]string, 0, len(unique)*4)
+	keyOf := make(map[string]uint32, len(unique)*4)
+	for _, t := range unique {
+		for _, bt := range []BlockType{BlockTypeBlock, BlockTypeMute, BlockTypeUnwatch} {
+			key, err := s.BlockKey(viewer, bt)
+			if err != nil {
+				return nil, err
+			}
+			keys = append(keys, key)
+			keyOf[key] = t
+		}
+		key, err := s.BlockKey(t, BlockTypeBlock)
+		if err != nil {
+			return nil, err
+		}
+		keys = append(keys, key)
+		keyOf[key] = t
+	}
+
+	pipe := s.redis.WithContext(ctx).Pipeline()
+	cmds := make([]*redis.IntCmd, 0, len(keys))
+	for _, key := range keys {
+		cmds = append(cmds, pipe.GetBit(ctx, key, int64(viewer)))
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, fmt.Errorf("batch block filter: %w", err)
+	}
+
+	// 同一 target 的 4 个 bit 中任意一个为 1 即被过滤
+	// GETBIT 对不存在的 key 返回 0（无关系），不会报错
+	filtered := make(map[uint32]bool, len(unique))
+	for i, cmd := range cmds {
+		bit, err := cmd.Result()
+		if err != nil {
+			return nil, fmt.Errorf("batch block filter: %w", err)
+		}
+		if bit == 1 {
+			filtered[keyOf[keys[i]]] = true
+		}
+	}
+	for t := range filtered {
+		result[t] = true
+	}
+	return result, nil
+}
+
 // GetBlockStatus 计算 userID 对 targetID 的关系状态（位组合）：
 // bit0(1) 拉黑，bit1(2) 屏蔽，bit2(4) 不想看；0 表示无任何关系。
 func (s *Servant) GetBlockStatus(ctx context.Context, userID uint32, targetID uint32) (uint8, error) {

@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"gorm.io/gorm"
+	"miaoverse/consts"
 	modelarticle "miaoverse/model/dao/article"
 )
 
@@ -166,6 +167,48 @@ func (d *ArticleDAO) QueryMetadatasByIDs(ids []uint64) ([]modelarticle.Metadata,
 	var list []modelarticle.Metadata
 	err := d.DB.Where("id IN ?", ids).Find(&list).Error
 	return list, err
+}
+
+// QueryFeedMetadatas 时间线文章：状态正常且非章节（novel_id=0），按发布时间倒序。
+// 屏蔽（ArticleStatusBlocked）、删除（ArticleStatusDeleted）等非正常状态一律不进入 feed。
+func (d *ArticleDAO) QueryFeedMetadatas(offset, limit int) ([]modelarticle.Metadata, error) {
+	var list []modelarticle.Metadata
+	err := d.DB.Model(&modelarticle.Metadata{}).
+		Where("status = ? AND novel_id = 0", consts.ArticleStatusNormal).
+		Order("created_at DESC, id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+// CountFeedMetadatas 统计时间线可见文章总数（正常状态 + 非章节）。
+func (d *ArticleDAO) CountFeedMetadatas() (int64, error) {
+	var count int64
+	err := d.DB.Model(&modelarticle.Metadata{}).
+		Where("status = ? AND novel_id = 0", consts.ArticleStatusNormal).
+		Count(&count).Error
+	return count, err
+}
+
+// QueryFeedMetadatasByUsers 关注流文章：作者在 followingIDs 中、状态正常且非章节。
+// 屏蔽/删除等非正常状态一律不进入 feed。
+func (d *ArticleDAO) QueryFeedMetadatasByUsers(followingIDs []uint32, offset, limit int) ([]modelarticle.Metadata, error) {
+	var list []modelarticle.Metadata
+	err := d.DB.Model(&modelarticle.Metadata{}).
+		Where("user_id IN ? AND status = ? AND novel_id = 0", followingIDs, consts.ArticleStatusNormal).
+		Order("created_at DESC, id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+// CountFeedMetadatasByUsers 统计关注流可见文章总数（口径与 QueryFeedMetadatasByUsers 一致）。
+func (d *ArticleDAO) CountFeedMetadatasByUsers(followingIDs []uint32) (int64, error) {
+	var count int64
+	err := d.DB.Model(&modelarticle.Metadata{}).
+		Where("user_id IN ? AND status = ? AND novel_id = 0", followingIDs, consts.ArticleStatusNormal).
+		Count(&count).Error
+	return count, err
 }
 
 // QueryBodyByMeta 按元数据中的 MongoID 查询正文（只查 MongoDB）。

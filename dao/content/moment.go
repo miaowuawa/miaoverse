@@ -125,6 +125,65 @@ func (d *ContentDAO) QueryAllMomentIDs() ([]moment.Moment, error) {
 	return list, err
 }
 
+// QueryFeedMoments 时间线动态：仅公开（permission=0）且状态正常，按发布时间倒序。
+// 屏蔽（MomentStatusBlocked）、删除（MomentStatusDeleted）等非正常状态一律不进入 feed。
+func (d *ContentDAO) QueryFeedMoments(offset, limit int) ([]moment.Moment, error) {
+	var list []moment.Moment
+	err := d.DB.Model(&moment.Moment{}).
+		Where("status = ? AND permission = ?", consts.MomentStatusNormal, consts.MomentPermissionPublic).
+		Order("created_at DESC, id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+// CountFeedMoments 统计时间线可见动态总数（公开 + 正常状态）。
+func (d *ContentDAO) CountFeedMoments() (int64, error) {
+	var count int64
+	err := d.DB.Model(&moment.Moment{}).
+		Where("status = ? AND permission = ?", consts.MomentStatusNormal, consts.MomentPermissionPublic).
+		Count(&count).Error
+	return count, err
+}
+
+// QueryFeedMomentsByUsers 关注流动态：作者在 followingIDs 中且状态正常。
+// 可见性：公开（0）全部可见；仅好友（1）/仅粉丝（3）需作者回关查看者（authorFollowsViewer 集合）；
+// 仅自己（2）不进入关注流。屏蔽/删除等非正常状态一律不进入 feed。
+func (d *ContentDAO) QueryFeedMomentsByUsers(followingIDs []uint32, authorFollowsViewer []uint32, offset, limit int) ([]moment.Moment, error) {
+	var list []moment.Moment
+	q := d.DB.Model(&moment.Moment{}).
+		Where("user_id IN ? AND status = ?", followingIDs, consts.MomentStatusNormal)
+	if len(authorFollowsViewer) > 0 {
+		q = q.Where("(permission = ? OR (permission IN ? AND user_id IN ?))",
+			consts.MomentPermissionPublic,
+			[]uint8{consts.MomentPermissionFriends, consts.MomentPermissionFans},
+			authorFollowsViewer)
+	} else {
+		q = q.Where("permission = ?", consts.MomentPermissionPublic)
+	}
+	err := q.Order("created_at DESC, id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+// CountFeedMomentsByUsers 统计关注流可见动态总数（口径与 QueryFeedMomentsByUsers 一致）。
+func (d *ContentDAO) CountFeedMomentsByUsers(followingIDs []uint32, authorFollowsViewer []uint32) (int64, error) {
+	var count int64
+	q := d.DB.Model(&moment.Moment{}).
+		Where("user_id IN ? AND status = ?", followingIDs, consts.MomentStatusNormal)
+	if len(authorFollowsViewer) > 0 {
+		q = q.Where("(permission = ? OR (permission IN ? AND user_id IN ?))",
+			consts.MomentPermissionPublic,
+			[]uint8{consts.MomentPermissionFriends, consts.MomentPermissionFans},
+			authorFollowsViewer)
+	} else {
+		q = q.Where("permission = ?", consts.MomentPermissionPublic)
+	}
+	err := q.Count(&count).Error
+	return count, err
+}
+
 // QueryRecentMomentIDs 查询最近 N 分钟内更新过的动态 ID（用于增量校准）。
 // 动态本身、评论、点赞都会刷新 moment.updated_at 或 moment_interact_count.updated_at。
 func (d *ContentDAO) QueryRecentMomentIDs(since time.Time) ([]uint64, error) {

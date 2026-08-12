@@ -16,6 +16,7 @@ import (
 	"miaoverse/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
+	"miaoverse/service/DBMigration"
 	"miaoverse/service/UserBlock"
 	storagemongo "miaoverse/service/mongo"
 	storages3 "miaoverse/service/s3"
@@ -52,6 +53,23 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 	sqlDB.SetMaxIdleConns(conf.Sql.MaxIdleConns) // 最大空闲连接数
 	sqlDB.SetConnMaxLifetime(time.Duration(conf.Sql.ConnMaxLifetime) * time.Minute)
 	sqlDB.SetConnMaxIdleTime(time.Duration(conf.Sql.ConnMaxIdletime) * time.Minute) // 连接最大空闲时间
+	// 自动迁移：把数据库结构迁移到最新版本，迁移失败直接阻止启动
+	// 迁移使用独立连接池（DSN 额外开启 multiStatements），主业务连接池不开启该选项，避免扩大注入面
+	migrationDSN := dsn + "&multiStatements=true"
+	migrationDB, err := gorm.Open(mysql.Open(migrationDSN), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Error),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("打开数据库迁移连接失败：%v", err)
+	}
+	migrationSQLDB, err := migrationDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("打开数据库迁移连接失败：%v", err)
+	}
+	defer migrationSQLDB.Close()
+	if err := DBMigration.Migrate(migrationDB); err != nil {
+		return nil, err
+	}
 	//redis
 	SessionStorage := fiberstoreredis.New(fiberstoreredis.Config{
 		Host:     conf.Redis.Host,

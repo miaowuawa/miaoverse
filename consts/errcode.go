@@ -19,3 +19,8 @@ const (
 	NeedLoginFullContent = 20001 // 未登录只能查看文章前 60% / 小说前 2 章，登录后查看完整内容
 	ArticleNeedSegments  = 20006 // 文章过长，需使用分段接口（/articles/:id/segments/:seq）拉取正文
 )
+
+// 4xx 下的业务码。
+const (
+	NeedLogin = 40101 // 需要登录：未登录访问需要登录的接口（如 following feed）
+)

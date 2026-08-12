@@ -64,6 +64,16 @@ func Unauthorized(ctx fiber.Ctx) error {
 	return JSON(ctx, fiber.StatusUnauthorized, i18n.ErrUnauthorized)
 }
 
+// NeedLogin 需要登录但未登录的拒绝响应，HTTP 401，body 中 code 为自定义业务错误码 40101。
+// 与 Unauthorized 的区别：40101 用于"接口本身需要登录"（如 following feed），
+// 而 Unauthorized 用于登录态失效/缺失的通用场景。
+func NeedLogin(ctx fiber.Ctx) error {
+	return ctx.Status(fiber.StatusUnauthorized).JSON(CodeWithMsg{
+		Code: consts.NeedLogin,
+		Msg:  i18n.Message(ctx, i18n.ErrNeedLogin),
+	})
+}
+
 func ServerError(ctx fiber.Ctx) error {
 	return JSON(ctx, fiber.StatusInternalServerError, i18n.ErrServerContactAdmin)
 }
@@ -120,6 +130,14 @@ func MomentPublished(ctx fiber.Ctx, moment MomentInfo) error {
 	})
 }
 
+func MomentUpdated(ctx fiber.Ctx, moment MomentInfo) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgMoment{
+		Code:   fiber.StatusOK,
+		Msg:    i18n.Message(ctx, i18n.OKMomentUpdated),
+		Moment: moment,
+	})
+}
+
 // MomentDetailOK 返回动态详情，已注销作者的展示字段统一打码，避免泄露注销前的用户名与签名。
 func MomentDetailOK(ctx fiber.Ctx, detail MomentDetail) error {
 	MaskClosedAccount(ctx, &detail.Author)
@@ -153,6 +171,19 @@ func ContentList(ctx fiber.Ctx, contents []ContentItem) error {
 		Code:     fiber.StatusOK,
 		Msg:      i18n.Message(ctx, i18n.OKContentList),
 		Contents: contents,
+	})
+}
+
+// FeedList 返回 feed 列表，作者已注销时展示字段统一打码。
+func FeedList(ctx fiber.Ctx, count int64, items []FeedItem) error {
+	for i := range items {
+		MaskClosedAccount(ctx, &items[i].Author)
+	}
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgFeedList{
+		Code:  fiber.StatusOK,
+		Msg:   i18n.Message(ctx, i18n.OKFeedFetched),
+		Count: count,
+		Items: items,
 	})
 }
 

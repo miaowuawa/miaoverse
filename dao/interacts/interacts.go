@@ -176,6 +176,79 @@ func (d *InteractsDAO) QueryFollowingByUser(userID uint32, offset, limit int) ([
 	return list, err
 }
 
+// QueryFollowingIDs 查询 userID 正在关注的全部用户 ID（user_from = userID，status 正常）。
+// 用于关注流 feed 的作者集合。
+func (d *InteractsDAO) QueryFollowingIDs(userID uint32) ([]uint32, error) {
+	var ids []uint32
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Where("user_from = ? AND type = ? AND status = ?",
+			userID, consts.InteractTypeFollow, consts.InteractStatusNormal).
+		Pluck("user_to", &ids).Error
+	return ids, err
+}
+
+// QueryFollowedByIDs 查询关注了 userID 的用户 ID 集合（user_to = userID，status 正常）。
+// 用于关注流中"仅好友/仅粉丝"动态的可见性判定（作者是否回关查看者）。
+func (d *InteractsDAO) QueryFollowedByIDs(userID uint32) ([]uint32, error) {
+	var ids []uint32
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Where("user_to = ? AND type = ? AND status = ?",
+			userID, consts.InteractTypeFollow, consts.InteractStatusNormal).
+		Pluck("user_from", &ids).Error
+	return ids, err
+}
+
+// HasLikedMomentsBatch 批量查询 userID 是否已点赞各动态（type=like, target_type=moment, status=normal）。
+// 一次 GROUP BY 查询，避免逐条 COUNT。
+func (d *InteractsDAO) HasLikedMomentsBatch(userID uint32, momentIDs []uint64) (map[uint64]bool, error) {
+	result := map[uint64]bool{}
+	if len(momentIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []struct {
+		TargetID uint64
+	}
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Select("DISTINCT target_id").
+		Where("user_from = ? AND target_id IN ? AND type = ? AND target_type = ? AND status = ?",
+			userID, momentIDs, consts.InteractTypeLike, consts.InteractTargetMoment, consts.InteractStatusNormal).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.TargetID] = true
+	}
+	return result, nil
+}
+
+// HasLikedArticlesBatch 批量查询 userID 是否已点赞各文章（type=like, status=normal）。
+// 注意：与现有文章详情接口（HasLikedMoment）口径一致，文章点赞记录复用 target_type=moment，
+// 不引入新的 target_type，避免与既有数据不一致。
+func (d *InteractsDAO) HasLikedArticlesBatch(userID uint32, articleIDs []uint64) (map[uint64]bool, error) {
+	result := map[uint64]bool{}
+	if len(articleIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []struct {
+		TargetID uint64
+	}
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Select("DISTINCT target_id").
+		Where("user_from = ? AND target_id IN ? AND type = ? AND target_type = ? AND status = ?",
+			userID, articleIDs, consts.InteractTypeLike, consts.InteractTargetMoment, consts.InteractStatusNormal).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.TargetID] = true
+	}
+	return result, nil
+}
+
 // QueryFollowersByUser 分页查询关注 userID 的用户列表（user_to = userID）
 func (d *InteractsDAO) QueryFollowersByUser(userID uint32, offset, limit int) ([]modelinteracts.Interacts, error) {
 	var list []modelinteracts.Interacts

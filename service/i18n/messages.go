@@ -47,6 +47,7 @@ const (
 	ErrTargetPunished        MessageKey = "error.target_punished"
 	ErrContentBlocked        MessageKey = "error.content_blocked"
 	ErrS3Unavailable         MessageKey = "error.s3_unavailable"
+	ErrNeedLogin             MessageKey = "error.need_login"
 
 	UserClosedUsername MessageKey = "user.closed_username"
 	UserClosedBio      MessageKey = "user.closed_bio"
@@ -62,6 +63,7 @@ const (
 	OKFileUploaded          MessageKey = "ok.file_uploaded"
 	OKFileTempLink          MessageKey = "ok.file_temp_link"
 	OKMomentPublished       MessageKey = "ok.moment_published"
+	OKMomentUpdated         MessageKey = "ok.moment_updated"
 	OKMomentDetailFetched   MessageKey = "ok.moment_detail_fetched"
 	OKBlockUpdated          MessageKey = "ok.block_updated"
 	OKContentList           MessageKey = "ok.content_list"
@@ -76,6 +78,7 @@ const (
 	OKArticleFetchedPartial MessageKey = "ok.article_fetched_partial"
 	OKArticleNeedSegments   MessageKey = "ok.article_need_segments"
 	OKArticleSegmentFetched MessageKey = "ok.article_segment_fetched"
+	OKFeedFetched           MessageKey = "ok.feed_fetched"
 	SMSActionLoginRegister  MessageKey = "sms.action.login_register"
 )
 
@@ -393,7 +396,7 @@ func resetCatalog() {
 			ErrRequestTimeout:        {Other: "请求超时，请重新尝试"},
 			ErrServerInternal:        {Other: "服务器内部错误，请稍后重试"},
 			ErrServerContactAdmin:    {Other: "服务器异常，请联系管理员"},
-			ErrSMSProvider:           {Other: "返回异常：{{error}}请联系管理人员！"},
+			ErrSMSProvider:           {Other: "短信服务暂时不可用，请稍后重试"},
 			ErrSMSCodeInvalid:        {Other: "验证码错误或不存在，请重试"},
 			ErrPhoneHasNoAccount:     {Other: "该手机号还没有账号，请使用短信登录自动注册首个账号"},
 			ErrNoPendingLoginAccount: {Other: "没有待选择的登录账号，请重新验证码登录"},
@@ -415,6 +418,7 @@ func resetCatalog() {
 			ErrPunished:              {Other: "账号封禁期间无法执行此操作"},
 			ErrTargetPunished:        {Other: "该用户存在违规记录，部分功能受限"},
 			ErrContentBlocked:        {Other: "内容因违规被屏蔽，无法显示"},
+			ErrNeedLogin:             {Other: "请先登录后再查看"},
 
 			UserClosedUsername: {Other: "已注销的账号"},
 			UserClosedBio:      {Other: "用户已注销。虽然我不知道 TA 在三次元过得好不好，但我替这个账号感谢你最后的回眸。 —— 站长留"},
@@ -428,6 +432,7 @@ func resetCatalog() {
 			OKLogout:                {Other: "退出登录成功"},
 			OKUserInfoUpdated:       {Other: "用户信息修改成功"},
 			OKMomentPublished:       {Other: "发布成功"},
+			OKMomentUpdated:         {Other: "修改成功"},
 			OKMomentDetailFetched:   {Other: "获取成功"},
 			OKBlockUpdated:          {Other: "操作成功"},
 			OKContentList:           {Other: "获取成功"},
@@ -442,6 +447,7 @@ func resetCatalog() {
 			OKArticleFetchedPartial: {Other: "登录后查看完整内容"},
 			OKArticleNeedSegments:   {Other: "文章过长，请使用分段接口获取正文"},
 			OKArticleSegmentFetched: {Other: "获取成功"},
+			OKFeedFetched:           {Other: "获取成功"},
 			SMSActionLoginRegister:  {Other: "登录或注册"},
 		},
 	}

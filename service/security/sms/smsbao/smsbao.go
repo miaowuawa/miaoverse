@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"miaoverse/model/apireq/sms/smsbaoreq"
 	sconf "miaoverse/model/server/conf"
 	"net/http"
@@ -13,6 +14,12 @@ import (
 	"strings"
 	"time"
 )
+
+// smsBaoHTTPTimeout 短信宝网关请求超时，避免网关无响应时长期占用连接。
+const smsBaoHTTPTimeout = 10 * time.Second
+
+// smsBaoMaxResponseBytes 短信宝响应体读取上限，防止异常响应耗尽内存。
+const smsBaoMaxResponseBytes = 4 << 10
 
 // SendPhoneCaptcha 发送短信验证码
 func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire time.Duration, usage string) error {
@@ -33,8 +40,9 @@ func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire ti
 	// 构建请求 URL
 	requestURL := fmt.Sprintf("%s?u=%s&p=%s&m=%s&c=%s", s.Gateway, s.Username, encryptedPassword, phone, encodedContent)
 
-	// 发送 HTTP 请求
-	resp, err := http.Get(requestURL)
+	// 发送 HTTP 请求（带超时，避免网关无响应时长期占用连接）
+	client := &http.Client{Timeout: smsBaoHTTPTimeout}
+	resp, err := client.Get(requestURL)
 	if err != nil {
 		return err
 	}
@@ -45,8 +53,8 @@ func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire ti
 		return errors.New(resp.Status)
 	}
 
-	// 读取响应内容
-	body, err := io.ReadAll(resp.Body)
+	// 读取响应内容（限制大小，防止异常响应耗尽内存）
+	body, err := io.ReadAll(io.LimitReader(resp.Body, smsBaoMaxResponseBytes))
 	if err != nil {
 		return err
 	}
@@ -62,28 +70,37 @@ func (s *SmsBaoServant) SendPhoneCaptcha(phone string, captcha string, expire ti
 		}
 	}
 
-	// 处理响应结果
+	// 处理响应结果：详细错误只写服务端日志，不向调用方暴露短信宝内部状态
 	switch result.Code {
 	case "0":
 		return nil
 	case "30":
-		return errors.New("密码错误！")
+		log.Printf("[smsbao] 发送失败：密码错误")
+		return errors.New("短信服务发送失败")
 	case "40":
-		return errors.New("账号不存在！")
+		log.Printf("[smsbao] 发送失败：账号不存在")
+		return errors.New("短信服务发送失败")
 	case "41":
-		return errors.New("余额不足！")
+		log.Printf("[smsbao] 发送失败：余额不足")
+		return errors.New("短信服务发送失败")
 	case "42":
-		return errors.New("帐号过期！")
+		log.Printf("[smsbao] 发送失败：帐号过期")
+		return errors.New("短信服务发送失败")
 	case "43":
-		return errors.New("IP地址限制！")
+		log.Printf("[smsbao] 发送失败：IP地址限制")
+		return errors.New("短信服务发送失败")
 	case "50":
-		return errors.New("内容含有敏感词！")
+		log.Printf("[smsbao] 发送失败：内容含有敏感词")
+		return errors.New("短信服务发送失败")
 	case "51":
-		return errors.New("手机号码不正确！")
+		log.Printf("[smsbao] 发送失败：手机号码不正确")
+		return errors.New("短信服务发送失败")
 	case "-1":
-		return errors.New("手机号码不正确或缺少参数！")
+		log.Printf("[smsbao] 发送失败：手机号码不正确或缺少参数")
+		return errors.New("短信服务发送失败")
 	default:
-		return errors.New(fmt.Sprintf("未知错误：%s - %s", result.Code, result.Msg))
+		log.Printf("[smsbao] 发送失败：未知错误 code=%s msg=%s", result.Code, result.Msg)
+		return errors.New("短信服务发送失败")
 	}
 }
 

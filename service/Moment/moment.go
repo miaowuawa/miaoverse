@@ -7,6 +7,7 @@ import (
 	modelmoment "miaoverse/model/dao/moment"
 	modeluser "miaoverse/model/dao/user"
 	"miaoverse/model/dto/moment/publishreq"
+	"miaoverse/model/dto/moment/updatereq"
 	"miaoverse/model/dto/resp"
 )
 
@@ -54,6 +55,65 @@ func NormalizePublish(req *publishreq.PublishMoment) (*modelmoment.Moment, bool)
 		CommentPermission: commentPermission,
 		Top:               top,
 	}, true
+}
+
+// NormalizeUpdate 校验并归一化编辑动态请求，返回可入库的更新字段。
+// 仅校验请求中出现的字段（指针非 nil），未出现的字段不修改。
+func NormalizeUpdate(req *updatereq.UpdateMoment) (map[string]any, bool) {
+	if req == nil {
+		return nil, false
+	}
+
+	updates := map[string]any{}
+
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if len(title) > consts.MaxMomentTitleLen {
+			return nil, false
+		}
+		updates["title"] = title
+	}
+	if req.Content != nil {
+		content := strings.TrimSpace(*req.Content)
+		if content == "" || len(content) > consts.MaxMomentContentLen {
+			return nil, false
+		}
+		updates["content"] = content
+	}
+	if req.Status != nil {
+		status := *req.Status
+		if status != consts.MomentStatusNormal && status != consts.MomentStatusDraft {
+			return nil, false
+		}
+		updates["status"] = status
+	}
+	if req.Permission != nil {
+		permission := *req.Permission
+		if permission > consts.MomentPermissionFans {
+			return nil, false
+		}
+		updates["permission"] = permission
+	}
+	if req.CommentPermission != nil {
+		commentPermission := *req.CommentPermission
+		if commentPermission > consts.MomentCommentPermissionNone {
+			return nil, false
+		}
+		updates["comment_permission"] = commentPermission
+	}
+	// 置顶：仅允许个人置顶（1），全站置顶（100）不允许普通用户设置
+	if req.Top != nil {
+		top := *req.Top
+		if top != consts.MomentTopNone && top != consts.MomentTopPersonal {
+			return nil, false
+		}
+		updates["top"] = top
+	}
+
+	if len(updates) == 0 {
+		return nil, false
+	}
+	return updates, true
 }
 
 func ToMomentInfo(m *modelmoment.Moment) resp.MomentInfo {

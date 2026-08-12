@@ -43,9 +43,10 @@ func SendSmsHandler(c fiber.Ctx, servants *server.Servants) error {
 
 	err = servants.SmsServant.SendPhoneCaptcha(req.Phone, code, time.Minute*5, i18n.Message(c, i18n.SMSActionLoginRegister))
 	if err != nil {
+		// 不向客户端回显短信服务内部错误（可能包含账号/余额等敏感状态），统一返回通用文案
 		return c.Status(fiber.StatusInternalServerError).JSON(resp.CodeWithMsg{
 			Code: fiber.StatusInternalServerError,
-			Msg:  i18n.T(c, i18n.ErrSMSProvider, i18n.Data{"error": err.Error()}),
+			Msg:  i18n.Message(c, i18n.ErrSMSProvider),
 		})
 	}
 

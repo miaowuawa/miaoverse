@@ -3,6 +3,7 @@ package api
 import (
 	userarticle "miaoverse/api/routers/v1/article"
 	usercontent "miaoverse/api/routers/v1/content"
+	userfeed "miaoverse/api/routers/v1/feed"
 	usermoment "miaoverse/api/routers/v1/moment"
 	usercomment "miaoverse/api/routers/v1/moment/comment"
 	"time"
@@ -61,6 +62,14 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		return login.LogoutHandler(c, servants)
 	})
 
+	// ===== Feed 组 /feeds =====
+	// timeline 时间线（无需登录）：全站公开内容按发布时间倒序。
+	// following 关注流（需登录，未登录返回 40101）：仅关注用户的内容。
+	// content 过滤：moment 只拉动态 / article 只拉文章 / all 动态+文章（默认）。
+	v1.Get("/feeds/:type", func(c fiber.Ctx) error {
+		return userfeed.ListHandler(c, servants)
+	})
+
 	// ===== 动态组 /moment（需登录）=====
 	momentGroup := v1.Group("/moment")
 	momentGroup.Use(middleware.RequireUser(servants, UserCheck.AccountActive()))
@@ -68,6 +77,14 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	momentGroup.Post("/", middleware.RequireNotPunished(servants, consts.PermPost), func(c fiber.Ctx) error {
 		return usermoment.PublishHandler(c, servants)
 	})
+	// 编辑动态（仅作者本人）：先校验内容是否被屏蔽，再校验与作者的拉黑关系（AllowSelf 允许本人）。
+	// 账号封禁与发布权限封禁校验与发布接口一致。
+	momentGroup.Patch("/:id", middleware.RequireNotPunished(servants, consts.PermPost),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentPathAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentPathAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return usermoment.UpdateHandler(c, servants)
+		})
 	// 给动态点赞。接口按内容类型（/moment/...）划分，后续文章等类型使用各自的子路径。
 	momentGroup.Post("/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
 		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),

@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 	"miaoverse/middleware"
 	"miaoverse/model/dto/moment/publishreq"
+	"miaoverse/model/dto/moment/updatereq"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
 	"miaoverse/service/Moment"
@@ -38,6 +39,50 @@ func PublishHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	return resp.MomentPublished(ctx, Moment.ToMomentInfo(created))
+}
+
+// UpdateHandler 编辑当前登录用户自己的动态（部分更新）。
+// 仅作者本人可编辑；动态被屏蔽（45101）、不存在/已删除/草稿等非正常状态（404）由中间件 Resolver 处理。
+func UpdateHandler(ctx fiber.Ctx, servants *server.Servants) error {
+	uid, ok := middleware.CurrentUID(ctx)
+	if !ok {
+		return resp.Unauthorized(ctx)
+	}
+	if !ctx.IsJSON() {
+		return resp.BadRequest(ctx)
+	}
+
+	req := &updatereq.UpdateMoment{}
+	if err := ctx.Bind().Body(req); err != nil {
+		return resp.BadRequest(ctx)
+	}
+
+	updates, ok := Moment.NormalizeUpdate(req)
+	if !ok {
+		return resp.BadRequest(ctx)
+	}
+
+	moment, ok := middleware.BlockMoment(ctx)
+	if !ok {
+		return resp.FileNotFound(ctx)
+	}
+	if moment.UserID != uid {
+		return resp.FileNotFound(ctx)
+	}
+
+	if err := servants.ContentServant.UpdateMoment(moment.ID, updates); err != nil {
+		return resp.ServerError(ctx)
+	}
+
+	updated, err := servants.ContentServant.QueryMomentByID(moment.ID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return resp.FileNotFound(ctx)
+		}
+		return resp.ServerError(ctx)
+	}
+
+	return resp.MomentUpdated(ctx, Moment.ToMomentInfo(updated))
 }
 
 // DetailHandler 获取动态详情。内容屏蔽校验由 RequireNoContentBlock、拉黑/被拉黑校验由 RequireNoBlockUser 中间件完成（40301），
