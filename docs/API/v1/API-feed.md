@@ -79,6 +79,7 @@ curl -i "http://localhost:3000/api/v1/feeds/timeline?content=all&offset=0&limit=
       "content": "今天天气真好",
       "description": "",
       "cover": "",
+      "images": ["15b3d25d-66cc-4ddc-9949-33c9e84d8c5d"],
       "article_type": 0,
       "novel_id": 0,
       "chapter_id": 0,
@@ -155,6 +156,7 @@ curl -i "http://localhost:3000/api/v1/feeds/timeline?content=all&offset=0&limit=
 | `items` | array | feed 条目列表 |
 | `items[].type` | string | 内容类型：`moment` 动态 / `article` 文章 |
 | `items[].content` | string | 动态为正文；文章为空（feed 不触达 MongoDB 正文，仅展示元数据与预览） |
+| `items[].images` | string[] | 动态图片文件 UUID 列表（仅动态有值，文章为空数组）；原始存储 URL 不下发，需通过 `GET /api/v1/user/files/:uuid/shared-link` 换取临时访问链接 |
 | `items[].full` | boolean | 动态恒为 `true`；文章恒为 `false`（正文需通过详情接口获取） |
 | `items[].author` | object | 作者公开资料；作者已注销时 `username`/`bio` 为固定打码文案 |
 | `items[].stats` | object | 互动计数：`likes` 点赞数、`comments` 评论数、`shares` 分享数 |

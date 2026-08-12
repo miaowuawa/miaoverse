@@ -236,14 +236,20 @@ func assemble(ctx context.Context, servants *server.Servants, uid uint32,
 		}
 	}
 
-	// 4. 组装条目（跳过被过滤作者的内容）
+	// 4. 批量查询动态图片 UUID（feed 图片只下发 UUID，原始存储 URL 不下发）
+	momentImages, err := servants.ContentServant.QueryMomentFileUUIDsBatch(momentIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// 5. 组装条目（跳过被过滤作者的内容）
 	items := make([]resp.FeedItem, 0, len(moments)+len(articles))
 	for i := range moments {
 		m := &moments[i]
 		if filtered[m.UserID] {
 			continue
 		}
-		items = append(items, momentToItem(m, authors[m.UserID], momentMetas[m.ID], likedMoments[m.ID]))
+		items = append(items, momentToItem(m, authors[m.UserID], momentMetas[m.ID], likedMoments[m.ID], momentImages[m.ID]))
 	}
 	for i := range articles {
 		a := &articles[i]
@@ -253,7 +259,7 @@ func assemble(ctx context.Context, servants *server.Servants, uid uint32,
 		items = append(items, articleToItem(a, authors[a.UserID], articleMetas[a.ID], likedArticles[a.ID]))
 	}
 
-	// 5. 按发布时间倒序合并（同时间按 id 倒序，保证稳定）
+	// 6. 按发布时间倒序合并（同时间按 id 倒序，保证稳定）
 	sortFeedItems(items)
 	return items, nil
 }
@@ -269,13 +275,15 @@ func sortFeedItems(items []resp.FeedItem) {
 }
 
 // momentToItem 动态 → feed 条目。
-func momentToItem(m *modelmoment.Moment, author modeluser.User, meta modelmoment.MomentInteractCount, liked bool) resp.FeedItem {
+// images 为动态图片文件 UUID 列表（不包含原始存储 URL，避免向客户端暴露存储细节）。
+func momentToItem(m *modelmoment.Moment, author modeluser.User, meta modelmoment.MomentInteractCount, liked bool, images []string) resp.FeedItem {
 	item := resp.FeedItem{
 		ID:          m.ID,
 		Type:        consts.ContentTypeMoment,
 		UserID:      m.UserID,
 		Title:       m.Title,
 		Content:     m.Content,
+		Images:      images,
 		Status:      m.Status,
 		Permission:  m.Permission,
 		CreatedAt:   m.CreatedAt,

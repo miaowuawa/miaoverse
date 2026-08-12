@@ -19,6 +19,9 @@ import (
 var (
 	ErrFileNotShared      = errors.New("file is not shared")
 	ErrFileBlockedByOwner = errors.New("file blocked by owner")
+
+	// AnonymousTempLinkUID 匿名临时链接使用的固定身份标识（不指向任何真实用户）
+	AnonymousTempLinkUID = "anonymous"
 )
 
 func BuildObjectKey(uid uint32, fileUUID string, fileName string) string {
@@ -82,6 +85,24 @@ func BuildSharedTempLink(ctx context.Context, s3 *storages3.Servant, requesterUI
 		return nil, err
 	}
 	link, err := s3.GetTempObjectLink(ctx, uidValue, signature.Signature, file.ObjectKey)
+	if err != nil {
+		return nil, err
+	}
+	return &resp.TempFileLink{
+		UUID:      file.UUID,
+		URL:       link.URL,
+		ExpiresAt: link.ExpiresAt,
+	}, nil
+}
+
+// BuildAnonymousSharedTempLink 为公开文件生成不绑定任何用户的临时访问链接（未登录查看场景）。
+// 使用固定匿名标识做签名，不涉及用户身份信息。
+func BuildAnonymousSharedTempLink(ctx context.Context, s3 *storages3.Servant, file *modeluser.File) (*resp.TempFileLink, error) {
+	signature, err := s3.CreateTempSignature(AnonymousTempLinkUID)
+	if err != nil {
+		return nil, err
+	}
+	link, err := s3.GetTempObjectLink(ctx, AnonymousTempLinkUID, signature.Signature, file.ObjectKey)
 	if err != nil {
 		return nil, err
 	}

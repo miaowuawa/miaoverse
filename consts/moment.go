@@ -33,6 +33,7 @@ const (
 const (
 	MaxMomentContentLen = 5000
 	MaxMomentTitleLen   = 255
+	MaxMomentImages     = 9 // 动态图片数量上限（与前端展示的 9 宫格一致）
 
 	ContentTypeMoment = "moment" // 内容类型标识
 )

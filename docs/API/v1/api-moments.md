@@ -45,7 +45,8 @@
   "status": 0,
   "permission": 0,
   "comment_permission": 0,
-  "top": 0
+  "top": 0,
+  "file_uuids": ["15b3d25d-66cc-4ddc-9949-33c9e84d8c5d"]
 }
 ```
 
@@ -58,6 +59,7 @@
 | `permission` | number | 否 | `0` 公开，`1` 仅好友，`2` 仅自己，`3` 仅粉丝 | 可见权限，默认 `0` |
 | `comment_permission` | number | 否 | `0` 全部可评论，`1` 仅好友（互相关注），`2` 仅粉丝，`3` 全部不可评论 | 评论权限，默认 `0` |
 | `top` | number | 否 | `0` 不置顶，`1` 个人置顶 | 置顶状态，默认 `0`；`100` 全站置顶不允许设置 |
+| `file_uuids` | string[] | 否 | 最多 9 个，UUID 格式合法且不重复；每个文件必须存在、为 `active` 状态、属于当前用户且为图片类型 | 动态图片文件 UUID 列表（先走上传接口获取），原始存储 URL 不下发 |
 
 #### 请求示例
 
@@ -95,7 +97,7 @@ curl -i -X POST http://localhost:3000/api/v1/moment \
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 请求体不是 JSON、`content` 为空或超长、`status`/`permission`/`comment_permission`/`top` 取值非法（含设置全站置顶） |
+| `400` | 请求体不是 JSON、`content` 为空或超长、`status`/`permission`/`comment_permission`/`top` 取值非法（含设置全站置顶）、`file_uuids` 数量超限/格式非法/存在非本人或非 active 或非图片的文件 |
 | `401` | 未登录或 session 中没有 `UID` |
 | `500` | 数据库写入异常 |
 
@@ -125,11 +127,12 @@ curl -i -X POST http://localhost:3000/api/v1/moment \
   "content": "修改后的内容",
   "permission": 1,
   "comment_permission": 2,
-  "top": 1
+  "top": 1,
+  "file_uuids": ["15b3d25d-66cc-4ddc-9949-33c9e84d8c5d", "a1b2c3d4-0000-0000-0000-000000000000"]
 }
 ```
 
-字段说明（均为可选，出现才修改）：
+字段说明（均为可选，出现才修改；`file_uuids` 出现即整体替换图片列表）：
 
 | 字段 | 类型 | 校验规则 | 说明 |
 | --- | --- | --- | --- |
@@ -139,6 +142,7 @@ curl -i -X POST http://localhost:3000/api/v1/moment \
 | `permission` | number | `0` 公开，`1` 仅好友，`2` 仅自己，`3` 仅粉丝 | 可见权限 |
 | `comment_permission` | number | `0` 全部可评论，`1` 仅好友（互相关注），`2` 仅粉丝，`3` 全部不可评论 | 评论权限 |
 | `top` | number | `0` 不置顶，`1` 个人置顶 | 置顶状态；`100` 全站置顶不允许设置 |
+| `file_uuids` | string[] | 最多 9 个，UUID 格式合法且不重复；每个文件必须存在、为 `active` 状态、属于当前用户且为图片类型 | 动态图片文件 UUID 列表（整体替换） |
 
 #### 请求示例
 
@@ -176,7 +180,7 @@ curl -i -X PATCH http://localhost:3000/api/v1/moment/1 \
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 请求体不是 JSON、请求体为空（无任何可修改字段）、字段取值非法（含设置全站置顶）、`:id` 非法 |
+| `400` | 请求体不是 JSON、请求体为空（无任何可修改字段）、字段取值非法（含设置全站置顶）、`:id` 非法、`file_uuids` 数量超限/格式非法/存在非本人或非 active 或非图片的文件 |
 | `401` | 未登录或 session 中没有 `UID` |
 | `403` | 发布权限封禁（`code` 为 `40302`）；与动态作者存在拉黑/被拉黑关系（`code` 为 `40301`） |
 | `404` | 动态不存在、已删除/草稿等非正常状态，或当前用户不是动态作者 |
@@ -221,6 +225,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
     "user_id": 10001,
     "title": "",
     "content": "今天天气真好",
+    "images": ["15b3d25d-66cc-4ddc-9949-33c9e84d8c5d"],
     "status": 0,
     "permission": 0,
     "comment_permission": 0,
@@ -255,6 +260,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `moment` | object | 动态详情 |
+| `moment.images` | string[] | 动态图片文件 UUID 列表（按展示顺序）；原始存储 URL 不下发，需通过 `GET /api/v1/user/files/:uuid/shared-link` 换取临时访问链接 |
 | `moment.author` | object | 作者公开资料；作者已注销时 `username`/`bio` 为固定打码文案 |
 | `moment.stats` | object | 互动计数：`likes` 点赞数、`comments` 评论数、`shares` 分享数 |
 | `moment.is_liked` | boolean | 当前登录用户是否已点赞该动态 |

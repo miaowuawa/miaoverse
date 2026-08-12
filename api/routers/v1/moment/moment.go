@@ -33,7 +33,13 @@ func PublishHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 	record.UserID = uid
 
-	created, err := servants.ContentServant.CreateMoment(*record)
+	// 安全：图片 UUID 必须全部合法、存在、active、属于当前用户且为图片类型
+	fileUUIDs, ok := Moment.ValidateImageUUIDs(servants.UserServant, uid, req.FileUUIDs)
+	if !ok {
+		return resp.BadRequest(ctx)
+	}
+
+	created, err := servants.ContentServant.CreateMomentWithFiles(*record, fileUUIDs)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
@@ -70,8 +76,23 @@ func UpdateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.FileNotFound(ctx)
 	}
 
-	if err := servants.ContentServant.UpdateMoment(moment.ID, updates); err != nil {
-		return resp.ServerError(ctx)
+	if len(updates) > 0 {
+		if err := servants.ContentServant.UpdateMoment(moment.ID, updates); err != nil {
+			return resp.ServerError(ctx)
+		}
+	}
+
+	// 编辑图片：file_uuids 非 nil 时整体替换关联（安全校验与发布一致）
+	if req.FileUUIDs != nil {
+		fileUUIDs, ok := Moment.ValidateImageUUIDs(servants.UserServant, uid, req.FileUUIDs)
+		if !ok {
+			return resp.BadRequest(ctx)
+		}
+		if err := servants.ContentServant.DB.Transaction(func(tx *gorm.DB) error {
+			return servants.ContentServant.ReplaceMomentFiles(tx, moment.ID, fileUUIDs)
+		}); err != nil {
+			return resp.ServerError(ctx)
+		}
 	}
 
 	updated, err := servants.ContentServant.QueryMomentByID(moment.ID)
@@ -111,7 +132,11 @@ func DetailHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return resp.ServerError(ctx)
 		}
-		return resp.MomentDetailOK(ctx, Moment.ToMomentDetail(moment, author, meta, false, false))
+		images, err := servants.ContentServant.QueryMomentFileUUIDs(moment.ID)
+		if err != nil {
+			return resp.ServerError(ctx)
+		}
+		return resp.MomentDetailOK(ctx, Moment.ToMomentDetail(moment, author, meta, false, false, images))
 	}
 
 	isFriend, isFan, err := Moment.RelationFlags(servants.InteractsServant, uid, moment.UserID)
@@ -146,5 +171,10 @@ func DetailHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	return resp.MomentDetailOK(ctx, Moment.ToMomentDetail(moment, author, meta, isLiked, isFollowing))
+	images, err := servants.ContentServant.QueryMomentFileUUIDs(moment.ID)
+	if err != nil {
+		return resp.ServerError(ctx)
+	}
+
+	return resp.MomentDetailOK(ctx, Moment.ToMomentDetail(moment, author, meta, isLiked, isFollowing, images))
 }

@@ -150,11 +150,8 @@ func TempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
 }
 
 // SharedTempLinkHandler 获取任意用户 active 文件的临时访问链接，用于帖子等查看/下载他人文件/媒体
+// 未登录用户可访问公开（permission=0）文件；登录用户按访问控制规则判定。
 func SharedTempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
-	uid, ok := middleware.CurrentUID(ctx)
-	if !ok {
-		return resp.Unauthorized(ctx)
-	}
 	if servants.S3Servant == nil {
 		return resp.StorageUnavailable(ctx)
 	}
@@ -173,6 +170,20 @@ func SharedTempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
 			return resp.FileNotFound(ctx)
 		}
 		return resp.ServerError(ctx)
+	}
+
+	uid, loggedIn := middleware.CurrentUID(ctx)
+	if !loggedIn {
+		// 匿名访问：仅允许公开（permission=0）文件，其余一律按不存在处理，避免泄露文件存在性；
+		// 临时链接使用固定匿名身份标识签名，不绑定任何用户
+		if record.Permission != consts.FilePermissionPublic {
+			return resp.FileNotFound(ctx)
+		}
+		link, err := UserFile.BuildAnonymousSharedTempLink(ctx.Context(), servants.S3Servant, record)
+		if err != nil {
+			return resp.ServerError(ctx)
+		}
+		return resp.FileTempLink(ctx, record.UUID, link.URL, link.ExpiresAt)
 	}
 
 	if err := UserFile.CheckSharedAccess(ctx.Context(), servants.BlockServant, servants.InteractsServant, uid, record.UserID, record.Permission); err != nil {

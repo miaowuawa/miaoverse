@@ -3,6 +3,7 @@ package Moment
 import (
 	"strings"
 
+	"github.com/google/uuid"
 	"miaoverse/consts"
 	modelmoment "miaoverse/model/dao/moment"
 	modeluser "miaoverse/model/dao/user"
@@ -10,6 +11,52 @@ import (
 	"miaoverse/model/dto/moment/updatereq"
 	"miaoverse/model/dto/resp"
 )
+
+// ValidateImageUUIDs 校验动态图片 UUID 列表：
+//   - 数量不超过 MaxMomentImages；
+//   - 每个 UUID 必须是合法格式且去重；
+//   - 每个文件必须存在、为 active 状态、属于当前用户、且为图片类型（安全：禁止引用他人/非图片/失效文件）。
+//
+// 返回规范化后的去重 UUID 列表与是否通过校验。
+func ValidateImageUUIDs(userServant interface {
+	QueryActiveFilesByUUIDsBatch(fileUUIDs []string) (map[string]modeluser.File, error)
+}, uid uint32, raw []string) ([]string, bool) {
+	if len(raw) == 0 {
+		return nil, true
+	}
+	if len(raw) > consts.MaxMomentImages {
+		return nil, false
+	}
+
+	seen := make(map[string]bool, len(raw))
+	uuids := make([]string, 0, len(raw))
+	for _, value := range raw {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return nil, false
+		}
+		if _, err := uuid.Parse(value); err != nil {
+			return nil, false
+		}
+		if seen[value] {
+			return nil, false
+		}
+		seen[value] = true
+		uuids = append(uuids, value)
+	}
+
+	files, err := userServant.QueryActiveFilesByUUIDsBatch(uuids)
+	if err != nil {
+		return nil, false
+	}
+	for _, fileUUID := range uuids {
+		file, ok := files[fileUUID]
+		if !ok || file.UserID != uid || file.FileType != consts.FileTypeImage {
+			return nil, false
+		}
+	}
+	return uuids, true
+}
 
 // NormalizePublish 校验并归一化发布动态请求，返回可入库的动态记录
 func NormalizePublish(req *publishreq.PublishMoment) (*modelmoment.Moment, bool) {
@@ -110,7 +157,8 @@ func NormalizeUpdate(req *updatereq.UpdateMoment) (map[string]any, bool) {
 		updates["top"] = top
 	}
 
-	if len(updates) == 0 {
+	// 请求体为空（无任何可修改字段）时拒绝；仅传 file_uuids（图片替换）时放行
+	if len(updates) == 0 && req.FileUUIDs == nil {
 		return nil, false
 	}
 	return updates, true
@@ -150,12 +198,13 @@ func ToContentItem(m *modelmoment.Moment, metas map[uint64]modelmoment.MomentInt
 // ToMomentDetail 将动态组装为详情响应：动态本体 + 作者信息 + 互动计数 + 当前用户互动状态。
 // 作者查询失败时不阻断详情返回（作者字段为空，由 handler 决定是否降级），
 // 但要求作者信息存在才能返回完整详情，由调用方保证查询前置。
-func ToMomentDetail(m *modelmoment.Moment, author *modeluser.User, meta *modelmoment.MomentInteractCount, isLiked bool, isFollowing bool) resp.MomentDetail {
+func ToMomentDetail(m *modelmoment.Moment, author *modeluser.User, meta *modelmoment.MomentInteractCount, isLiked bool, isFollowing bool, images []string) resp.MomentDetail {
 	detail := resp.MomentDetail{
 		ID:                m.ID,
 		UserID:            m.UserID,
 		Title:             m.Title,
 		Content:           m.Content,
+		Images:            images,
 		Status:            m.Status,
 		Permission:        m.Permission,
 		CommentPermission: m.CommentPermission,

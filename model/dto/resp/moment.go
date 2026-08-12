@@ -38,6 +38,7 @@ type MomentDetail struct {
 	UserID            uint32         `json:"user_id"`
 	Title             string         `json:"title"`
 	Content           string         `json:"content"`
+	Images            []string       `json:"images"`
 	Status            uint8          `json:"status"`
 	Permission        uint8          `json:"permission"`
 	CommentPermission uint8          `json:"comment_permission"`

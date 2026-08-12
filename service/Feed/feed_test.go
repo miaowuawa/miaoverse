@@ -26,7 +26,7 @@ func TestMomentToItem(t *testing.T) {
 	author := modeluser.User{ID: 10001, Nickname: "喵"}
 	meta := modelmoment.MomentInteractCount{MomentID: 1, LikeCount: 3, CommentCount: 2, ShareCount: 1}
 
-	item := momentToItem(m, author, meta, true)
+	item := momentToItem(m, author, meta, true, []string{"uuid-1"})
 	if item.Type != consts.ContentTypeMoment {
 		t.Fatalf("type = %q, want %q", item.Type, consts.ContentTypeMoment)
 	}
@@ -38,6 +38,9 @@ func TestMomentToItem(t *testing.T) {
 	}
 	if !item.IsLiked || !item.Full {
 		t.Fatalf("is_liked=%v full=%v, want true/true", item.IsLiked, item.Full)
+	}
+	if len(item.Images) != 1 || item.Images[0] != "uuid-1" {
+		t.Fatalf("images mismatch: %+v", item.Images)
 	}
 	if item.Author.Nickname != "喵" {
 		t.Fatalf("author mismatch: %+v", item.Author)
@@ -121,7 +124,7 @@ func TestMergeSortedStableOnEqualTime(t *testing.T) {
 func mergeSorted(moments []modelmoment.Moment, articles []modelarticle.Metadata) []resp.FeedItem {
 	items := make([]resp.FeedItem, 0, len(moments)+len(articles))
 	for i := range moments {
-		items = append(items, momentToItem(&moments[i], modeluser.User{}, modelmoment.MomentInteractCount{}, false))
+		items = append(items, momentToItem(&moments[i], modeluser.User{}, modelmoment.MomentInteractCount{}, false, nil))
 	}
 	for i := range articles {
 		items = append(items, articleToItem(&articles[i], modeluser.User{}, modelarticle.ArticleInteractCount{}, false))

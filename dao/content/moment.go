@@ -23,6 +23,77 @@ func (d *ContentDAO) CreateMoment(m moment.Moment) (*moment.Moment, error) {
 	return &m, nil
 }
 
+// CreateMomentWithFiles 事务内创建动态 + 计数元数据 + 图片关联，保证发布原子性。
+func (d *ContentDAO) CreateMomentWithFiles(m moment.Moment, fileUUIDs []string) (*moment.Moment, error) {
+	err := d.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&m).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&moment.MomentInteractCount{MomentID: m.ID}).Error; err != nil {
+			return err
+		}
+		return d.ReplaceMomentFiles(tx, m.ID, fileUUIDs)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// ReplaceMomentFiles 事务内替换动态图片关联（编辑场景：先删旧关联再写新关联）。
+func (d *ContentDAO) ReplaceMomentFiles(tx *gorm.DB, momentID uint64, fileUUIDs []string) error {
+	if err := tx.Where("moment_id = ?", momentID).Delete(&moment.MomentFile{}).Error; err != nil {
+		return err
+	}
+	if len(fileUUIDs) == 0 {
+		return nil
+	}
+	rows := make([]moment.MomentFile, 0, len(fileUUIDs))
+	for i, fileUUID := range fileUUIDs {
+		rows = append(rows, moment.MomentFile{
+			MomentID: momentID,
+			FileUUID: fileUUID,
+			Sort:     uint32(i),
+		})
+	}
+	return tx.Create(&rows).Error
+}
+
+// QueryMomentFileUUIDs 查询动态图片 UUID 列表（按 sort 升序）。
+func (d *ContentDAO) QueryMomentFileUUIDs(momentID uint64) ([]string, error) {
+	var rows []moment.MomentFile
+	if err := d.DB.Where("moment_id = ?", momentID).
+		Order("sort ASC, id ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	uuids := make([]string, 0, len(rows))
+	for i := range rows {
+		uuids = append(uuids, rows[i].FileUUID)
+	}
+	return uuids, nil
+}
+
+// QueryMomentFileUUIDsBatch 批量查询多个动态的图片 UUID（feed 场景，避免 N+1）。
+// 返回 moment_id → 按 sort 升序的 UUID 列表。
+func (d *ContentDAO) QueryMomentFileUUIDsBatch(momentIDs []uint64) (map[uint64][]string, error) {
+	result := map[uint64][]string{}
+	if len(momentIDs) == 0 {
+		return result, nil
+	}
+	var rows []moment.MomentFile
+	if err := d.DB.Where("moment_id IN ?", momentIDs).
+		Order("moment_id ASC, sort ASC, id ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		momentID := rows[i].MomentID
+		result[momentID] = append(result[momentID], rows[i].FileUUID)
+	}
+	return result, nil
+}
+
 func (d *ContentDAO) QueryMomentByID(id uint64) (*moment.Moment, error) {
 	var m moment.Moment
 	err := d.DB.Where("id = ?", id).First(&m).Error

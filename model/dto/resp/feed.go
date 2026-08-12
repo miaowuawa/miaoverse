@@ -7,7 +7,8 @@ import (
 )
 
 // FeedItem feed 条目：动态与文章统一结构。
-// 动态：Content 为动态正文，无 Description/Cover/Type/NovelID/ChapterID（零值）。
+// 动态：Content 为动态正文，无 Description/Cover/Type/NovelID/ChapterID（零值）；
+// Images 为动态图片文件 UUID 列表（仅动态有值，文章为空），原始存储 URL 不下发，需经临时链接接口换取。
 // 文章：Content 为文章正文（可能被截断，Full 表示是否完整），Description/Cover 等为元数据字段。
 type FeedItem struct {
 	ID          uint64         `json:"id"`
@@ -17,6 +18,7 @@ type FeedItem struct {
 	Content     string         `json:"content"`
 	Description string         `json:"description"`
 	Cover       string         `json:"cover"`
+	Images      []string       `json:"images"`
 	ArticleType uint8          `json:"article_type"`
 	NovelID     uint64         `json:"novel_id"`
 	ChapterID   uint64         `json:"chapter_id"`
