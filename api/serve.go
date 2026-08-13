@@ -92,6 +92,13 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		func(c fiber.Ctx) error {
 			return userinteract.LikeHandler(c, servants)
 		})
+	// 取消点赞（幂等）。校验与点赞一致。
+	momentGroup.Delete("/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return userinteract.UnlikeHandler(c, servants)
+		})
 
 	// 动态详情（无需登录）：未登录用户仅可查看公开动态；登录用户按可见性规则查看。
 	// 内容被屏蔽返回 451（45101）；拉黑/被拉黑任意一方存在时拒绝（40301）；动态不存在或不可见返回 404。
@@ -178,6 +185,12 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{BodyField: "target", CheckMuteUnwatch: true}),
 		func(c fiber.Ctx) error {
 			return userinteract.FollowHandler(c, servants)
+		})
+	// 取消关注（幂等）。校验与关注一致。
+	userGroup.Delete("/follows", middleware.RequireNotPunished(servants, consts.PermSocial),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{BodyField: "target", CheckMuteUnwatch: true}),
+		func(c fiber.Ctx) error {
+			return userinteract.UnfollowHandler(c, servants)
 		})
 	userGroup.Get("/punishments", func(c fiber.Ctx) error {
 		return userpunishment.ListMineHandler(c, servants)

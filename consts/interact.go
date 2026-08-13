@@ -29,10 +29,12 @@ const (
 )
 
 const (
-	ActionAdd    = "add"
-	ActionRemove = "remove"
-	ActionFollow = "follow"
-	ActionLike   = "like"
+	ActionAdd      = "add"
+	ActionRemove   = "remove"
+	ActionFollow   = "follow"
+	ActionUnfollow = "unfollow"
+	ActionLike     = "like"
+	ActionUnlike   = "unlike"
 )
 
 const (
