@@ -43,7 +43,8 @@ func (d *InteractsDAO) UnfollowUser(userFrom uint32, userTo uint32) error {
 }
 
 // LikeMomentAndMeta 点赞动态并原子自增动态点赞计数（事务，幂等）。
-func (d *InteractsDAO) LikeMomentAndMeta(userID uint32, momentID uint64) error {
+// momentAuthor 为动态作者 ID：interacts.user_to 有外键约束，必须指向真实用户（不能为 0）。
+func (d *InteractsDAO) LikeMomentAndMeta(userID uint32, momentID uint64, momentAuthor uint32) error {
 	return d.DB.Transaction(func(tx *gorm.DB) error {
 		var count int64
 		if err := tx.Model(&modelinteracts.Interacts{}).
@@ -58,7 +59,7 @@ func (d *InteractsDAO) LikeMomentAndMeta(userID uint32, momentID uint64) error {
 
 		interact := modelinteracts.Interacts{
 			UserFrom:   userID,
-			UserTo:     0,
+			UserTo:     momentAuthor,
 			TargetID:   momentID,
 			Type:       consts.InteractTypeLike,
 			TargetType: consts.InteractTargetMoment,
@@ -196,6 +197,40 @@ func (d *InteractsDAO) QueryFollowedByIDs(userID uint32) ([]uint32, error) {
 			userID, consts.InteractTypeFollow, consts.InteractStatusNormal).
 		Pluck("user_from", &ids).Error
 	return ids, err
+}
+
+// QueryFollowStatusBatch 批量查询 viewerID 与各 targetID 的关注关系。
+// 返回两个集合：viewerFollows（viewerID 关注了 targetID）、targetFollowsViewer（targetID 关注了 viewerID）。
+// 一次 GROUP BY 查询，避免逐条 COUNT。
+func (d *InteractsDAO) QueryFollowStatusBatch(viewerID uint32, targetIDs []uint32) (viewerFollows map[uint32]bool, targetFollowsViewer map[uint32]bool, err error) {
+	viewerFollows = map[uint32]bool{}
+	targetFollowsViewer = map[uint32]bool{}
+	if len(targetIDs) == 0 {
+		return viewerFollows, targetFollowsViewer, nil
+	}
+
+	var rows []struct {
+		UserFrom uint32
+		UserTo   uint32
+	}
+	err = d.DB.Model(&modelinteracts.Interacts{}).
+		Select("DISTINCT user_from, user_to").
+		Where("type = ? AND status = ? AND ((user_from = ? AND user_to IN ?) OR (user_to = ? AND user_from IN ?))",
+			consts.InteractTypeFollow, consts.InteractStatusNormal,
+			viewerID, targetIDs, viewerID, targetIDs).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, row := range rows {
+		if row.UserFrom == viewerID {
+			viewerFollows[row.UserTo] = true
+		}
+		if row.UserTo == viewerID {
+			targetFollowsViewer[row.UserFrom] = true
+		}
+	}
+	return viewerFollows, targetFollowsViewer, nil
 }
 
 // HasLikedMomentsBatch 批量查询 userID 是否已点赞各动态（type=like, target_type=moment, status=normal）。

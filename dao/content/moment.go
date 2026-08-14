@@ -132,6 +132,20 @@ func (d *ContentDAO) QueryVisibleMomentsByUser(viewerID uint32, targetUserID uin
 	return list, err
 }
 
+// QueryVisibleHotMomentsByUser 分页查询目标用户对查看者可见的动态，按点赞量倒序（同点赞按发布时间倒序）。
+func (d *ContentDAO) QueryVisibleHotMomentsByUser(viewerID uint32, targetUserID uint32, isFriend bool, isFan bool, offset, limit int) ([]moment.Moment, error) {
+	var list []moment.Moment
+	err := d.DB.Table("moment").
+		Select("moment.*").
+		Joins("LEFT JOIN moment_interact_count ON moment_interact_count.moment_id = moment.id").
+		Where("moment.user_id = ? AND moment.status = ?", targetUserID, consts.MomentStatusNormal).
+		Where(d.visibleMomentScope(viewerID, targetUserID, isFriend, isFan)).
+		Order("COALESCE(moment_interact_count.like_count, 0) DESC, moment.created_at DESC, moment.id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
 // visibleMomentScope 构造动态可见性 SQL 条件
 func (d *ContentDAO) visibleMomentScope(viewerID uint32, targetUserID uint32, isFriend bool, isFan bool) *gorm.DB {
 	scope := d.DB.Where("permission = ?", consts.MomentPermissionPublic)

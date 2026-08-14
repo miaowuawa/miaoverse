@@ -79,6 +79,11 @@ func listRelation(ctx fiber.Ctx, servants *server.Servants, isFollower bool) err
 		return resp.ServerError(ctx)
 	}
 
+	viewerFollows, targetFollowsViewer, err := servants.InteractsServant.QueryFollowStatusBatch(uid, ids)
+	if err != nil {
+		return resp.ServerError(ctx)
+	}
+
 	items := make([]resp.RelationUser, 0, len(interacts))
 	for i := range interacts {
 		var userID uint32
@@ -96,12 +101,27 @@ func listRelation(ctx fiber.Ctx, servants *server.Servants, isFollower bool) err
 			return resp.ServerError(ctx)
 		}
 		items = append(items, resp.RelationUser{
-			User:        u,
-			BlockStatus: blockStatus,
+			User:         u,
+			BlockStatus:  blockStatus,
+			FollowStatus: followStatus(viewerFollows[userID], targetFollowsViewer[userID]),
 		})
 	}
 
 	return resp.RelationList(ctx, count, items)
+}
+
+// followStatus 以当前查看者为视角计算关注关系状态。
+func followStatus(viewerFollows, targetFollowsViewer bool) uint8 {
+	switch {
+	case viewerFollows && targetFollowsViewer:
+		return consts.FollowStatusMutual
+	case viewerFollows:
+		return consts.FollowStatusFollowing
+	case targetFollowsViewer:
+		return consts.FollowStatusFollowedBy
+	default:
+		return consts.FollowStatusNone
+	}
 }
 
 func parsePagination(ctx fiber.Ctx) (int, int, bool) {

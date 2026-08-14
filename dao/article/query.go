@@ -103,6 +103,138 @@ func (d *ArticleDAO) CountMetadatasByUser(userID uint32, status uint8) (int64, e
 	return count, err
 }
 
+// QueryUserMetadatasByType 分页查询某用户指定文章类型（type）的元数据列表（只查 MySQL）。
+// 章节记录（novel_id != 0）不在此列表返回，通过 QueryChaptersByNovel 获取。
+func (d *ArticleDAO) QueryUserMetadatasByType(userID uint32, articleType uint8, status uint8, offset, limit int) ([]modelarticle.Metadata, error) {
+	var list []modelarticle.Metadata
+	q := d.DB.Where("user_id = ? AND type = ? AND novel_id = 0", userID, articleType)
+	if status != 255 {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&list).Error
+	return list, err
+}
+
+// CountUserMetadatasByType 统计某用户指定文章类型的元数据数量（不含章节）。
+func (d *ArticleDAO) CountUserMetadatasByType(userID uint32, articleType uint8, status uint8) (int64, error) {
+	var count int64
+	q := d.DB.Model(&modelarticle.Metadata{}).Where("user_id = ? AND type = ? AND novel_id = 0", userID, articleType)
+	if status != 255 {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Count(&count).Error
+	return count, err
+}
+
+// QueryUserMetadatasAll 分页查询某用户全部非章节文章（不含动态，仅文章域）。
+func (d *ArticleDAO) QueryUserMetadatasAll(userID uint32, status uint8, offset, limit int) ([]modelarticle.Metadata, error) {
+	var list []modelarticle.Metadata
+	q := d.DB.Where("user_id = ? AND novel_id = 0", userID)
+	if status != 255 {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&list).Error
+	return list, err
+}
+
+// CountUserMetadatasAll 统计某用户全部非章节文章数量。
+func (d *ArticleDAO) CountUserMetadatasAll(userID uint32, status uint8) (int64, error) {
+	var count int64
+	q := d.DB.Model(&modelarticle.Metadata{}).Where("user_id = ? AND novel_id = 0", userID)
+	if status != 255 {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Count(&count).Error
+	return count, err
+}
+
+// QueryUserNovels 分页查询某用户的小说根文章（type=novel 且 novel_id=0）。
+func (d *ArticleDAO) QueryUserNovels(userID uint32, status uint8, offset, limit int) ([]modelarticle.Metadata, error) {
+	var list []modelarticle.Metadata
+	q := d.DB.Where("user_id = ? AND type = ? AND novel_id = 0", userID, consts.ArticleTypeNovel)
+	if status != 255 {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Order("id DESC").Offset(offset).Limit(limit).Find(&list).Error
+	return list, err
+}
+
+// CountUserNovels 统计某用户小说根文章数量。
+func (d *ArticleDAO) CountUserNovels(userID uint32, status uint8) (int64, error) {
+	var count int64
+	q := d.DB.Model(&modelarticle.Metadata{}).Where("user_id = ? AND type = ? AND novel_id = 0", userID, consts.ArticleTypeNovel)
+	if status != 255 {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Count(&count).Error
+	return count, err
+}
+
+// CountChaptersByNovels 批量统计各小说根文章的章节数（novel_id 下的章节记录数，status 正常）。
+func (d *ArticleDAO) CountChaptersByNovels(novelIDs []uint64) (map[uint64]uint64, error) {
+	result := map[uint64]uint64{}
+	if len(novelIDs) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		NovelID uint64
+		Cnt     uint64
+	}
+	err := d.DB.Model(&modelarticle.Metadata{}).
+		Select("novel_id, COUNT(*) AS cnt").
+		Where("novel_id IN ? AND status = ?", novelIDs, consts.ArticleStatusNormal).
+		Group("novel_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		result[r.NovelID] = r.Cnt
+	}
+	return result, nil
+}
+
+// QueryUserHotMetadatas 分页查询某用户全部非章节文章，按点赞量倒序（同点赞按发布时间倒序）。
+func (d *ArticleDAO) QueryUserHotMetadatas(userID uint32, status uint8, offset, limit int) ([]modelarticle.Metadata, error) {
+	return d.queryUserMetasHot(userID, nil, status, offset, limit)
+}
+
+// QueryUserHotMetadatasByType 分页查询某用户指定文章类型的非章节文章，按点赞量倒序（同点赞按发布时间倒序）。
+func (d *ArticleDAO) QueryUserHotMetadatasByType(userID uint32, articleType uint8, status uint8, offset, limit int) ([]modelarticle.Metadata, error) {
+	return d.queryUserMetasHot(userID, &articleType, status, offset, limit)
+}
+
+// queryUserMetasHot 按用户（可限定类型）查询非章节文章，按点赞量倒序。
+// 点赞量取 article_interact_count 冗余计数（LEFT JOIN，无记录按 0 计）。
+func (d *ArticleDAO) queryUserMetasHot(userID uint32, articleType *uint8, status uint8, offset, limit int) ([]modelarticle.Metadata, error) {
+	var list []modelarticle.Metadata
+	q := d.DB.Table("article_meta").
+		Select("article_meta.*").
+		Joins("LEFT JOIN article_interact_count ON article_interact_count.article_id = article_meta.id").
+		Where("article_meta.user_id = ? AND article_meta.novel_id = 0", userID)
+	if articleType != nil {
+		q = q.Where("article_meta.type = ?", *articleType)
+	}
+	if status != 255 {
+		q = q.Where("article_meta.status = ?", status)
+	}
+	err := q.Order("COALESCE(article_interact_count.like_count, 0) DESC, article_meta.created_at DESC, article_meta.id DESC").
+		Offset(offset).Limit(limit).
+		Find(&list).Error
+	return list, err
+}
+
+// CountUserHotMetadatas 统计某用户全部非章节文章数量（口径与 QueryUserHotMetadatas 一致）。
+func (d *ArticleDAO) CountUserHotMetadatas(userID uint32, status uint8) (int64, error) {
+	var count int64
+	q := d.DB.Model(&modelarticle.Metadata{}).Where("user_id = ? AND novel_id = 0", userID)
+	if status != 255 {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Count(&count).Error
+	return count, err
+}
+
 // QueryInteractCount 查询单篇文章互动计数。
 func (d *ArticleDAO) QueryInteractCount(articleID uint64) (*modelarticle.ArticleInteractCount, error) {
 	if articleID == 0 {

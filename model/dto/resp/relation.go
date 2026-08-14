@@ -4,7 +4,8 @@ import "miaoverse/model/dao/user"
 
 type RelationUser struct {
 	user.User
-	BlockStatus uint8 `json:"block_status"`
+	BlockStatus  uint8 `json:"block_status"`
+	FollowStatus uint8 `json:"follow_status"`
 }
 
 type CodeWithMsgRelationList struct {

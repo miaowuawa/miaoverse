@@ -65,10 +65,19 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	// ===== Feed 组 /feeds =====
 	// timeline 时间线（无需登录）：全站公开内容按发布时间倒序。
 	// following 关注流（需登录，未登录返回 40101）：仅关注用户的内容。
-	// content 过滤：moment 只拉动态 / article 只拉文章 / all 动态+文章（默认）。
+	// user 用户内容流（需登录）：?uid= 指定用户发布的全部内容（动态/文章/小说元数据+章节数），
+	//     按 ?sort=time|hot 排序；拉黑/被拉黑/屏蔽/不想看关系与账号封禁校验在此路由完成（40301/40303）。
+	// content 过滤：moment 只拉动态 / article 只拉文章 / novel 只拉小说 / all 动态+文章（默认）。
 	v1.Get("/feeds/:type", func(c fiber.Ctx) error {
 		return userfeed.ListHandler(c, servants)
 	})
+	// 用户内容流单独路由：挂拉黑校验中间件（PathParam: uid），并允许本人查看。
+	// 目标用户账号封禁（UserStatusBanned）由 handler 内校验返回 40303。
+	v1.Get("/feeds/user/:uid", middleware.RequireUser(servants, UserCheck.AccountActive()),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{PathParam: "uid", AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return userfeed.UserListHandler(c, servants)
+		})
 
 	// ===== 动态组 /moment（需登录）=====
 	momentGroup := v1.Group("/moment")

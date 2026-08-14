@@ -59,7 +59,7 @@ func LikeHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.BadRequest(ctx)
 	}
 
-	if err := servants.InteractsServant.LikeMomentAndMeta(uid, moment.ID); err != nil {
+	if err := servants.InteractsServant.LikeMomentAndMeta(uid, moment.ID, moment.UserID); err != nil {
 		return resp.ServerError(ctx)
 	}
 

@@ -925,19 +925,23 @@ curl -i http://localhost:3000/api/v1/user/users/20002/contents/count \
 
 ### `GET /api/v1/user/users/:uid/contents`
 
-分页获取目标用户对当前登录用户可见的内容列表。
+分页获取目标用户对当前登录用户可见的内容列表。支持按分类拉取动态/文章/小说。
 
 #### 请求参数
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
+| `category` | string | 否 | 内容分类：`moment` 动态（默认）、`article` 文章、`novel` 小说 |
 | `offset` | number | 否 | 偏移量，默认 `0` |
 | `limit` | number | 否 | 每页数量，默认 `20`，最大 `100` |
 
 #### 请求示例
 
 ```bash
-curl -i "http://localhost:3000/api/v1/user/users/20002/contents?offset=0&limit=20" \
+curl -i "http://localhost:3000/api/v1/user/users/20002/contents?category=moment&offset=0&limit=20" \
+  -b cookie.txt
+
+curl -i "http://localhost:3000/api/v1/user/users/20002/contents?category=novel&offset=0&limit=20" \
   -b cookie.txt
 ```
 
@@ -954,7 +958,15 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/contents?offset=0&limit=2
       "id": 1,
       "type": "moment",
       "comment": 3,
-      "like": 5
+      "like": 5,
+      "chapter_count": 0
+    },
+    {
+      "id": 100,
+      "type": "article",
+      "comment": 2,
+      "like": 8,
+      "chapter_count": 12
     }
   ]
 }
@@ -965,9 +977,16 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/contents?offset=0&limit=2
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | number | 内容 ID |
-| `type` | string | 内容类型，当前为 `moment` |
+| `type` | string | 内容类型：`moment` 动态 / `article` 文章（`category=novel` 时指小说根文章） |
 | `comment` | number | 评论数 |
 | `like` | number | 点赞数 |
+| `chapter_count` | number | 小说（`category=novel`）已发布章节数；其余分类恒为 `0` |
+
+#### 分类规则
+
+- `moment`：可见性规则与下文一致。
+- `article`：仅返回普通文章（`type=0`，非小说、非章节记录）。
+- `novel`：仅返回小说根文章（`type=2` 且非章节记录），附已发布章节数；章节内容通过文章详情/分段接口获取。
 
 #### 可见性规则
 
@@ -1153,7 +1172,8 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
       "status": 1,
       "created_at": "2026-06-01T12:00:00+08:00",
       "updated_at": "2026-06-01T12:00:00+08:00",
-      "block_status": 0
+      "block_status": 0,
+      "follow_status": 1
     }
   ]
 }
@@ -1166,6 +1186,7 @@ curl -i "http://localhost:3000/api/v1/user/users/20002/following?offset=0&limit=
 | `count` | number | 总数 |
 | `users` | array | 用户列表，字段与 `user` 表一致。列表中已注销账号（`status=3`）的 `username` 固定返回「已注销的账号」、`bio` 固定返回站长留言文案 |
 | `users[].block_status` | number | 当前登录用户对列表中每个用户的关系状态（位组合）：`0` 无关系，`1` 拉黑，`2` 屏蔽，`4` 不想看 |
+| `users[].follow_status` | number | 当前登录用户与列表中每个用户的关注关系（以当前登录用户为视角）：`0` 未关注，`1` 已关注（当前用户关注了对方），`2` 被关注（对方关注了当前用户），`3` 互相关注 |
 
 #### 可能的错误
 

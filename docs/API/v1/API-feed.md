@@ -8,6 +8,7 @@ Feed（信息流）接口：按类型拉取动态与文章的混合信息流。
 | --- | --- | --- |
 | 拉取时间线 | `GET /api/v1/feeds/timeline` | 否 |
 | 拉取关注流 | `GET /api/v1/feeds/following` | 是（未登录返回 `40101`） |
+| 拉取用户内容流 | `GET /api/v1/feeds/user/:uid` | 是 |
 
 ## 通用约定
 
@@ -24,7 +25,15 @@ Feed（信息流）接口：按类型拉取动态与文章的混合信息流。
 | --- | --- |
 | `all`（默认） | 动态 + 文章混合 |
 | `moment` | 只拉取动态 |
-| `article` | 只拉取文章 |
+| `article` | 只拉取文章（不含小说） |
+| `novel` | 只拉取小说（`type=novel` 的根文章，含章节数；**仅用户内容流支持**，其余类型传该值返回 `400`） |
+
+### 排序
+
+| `sort` 取值 | 说明 |
+| --- | --- |
+| `time`（默认） | 按发布时间倒序 |
+| `hot` | 按点赞量倒序（同点赞按发布时间倒序）；**仅用户内容流支持**，其余类型传该值返回 `400` |
 
 ### 内容可见性规则
 
@@ -34,12 +43,6 @@ Feed（信息流）接口：按类型拉取动态与文章的混合信息流。
   - 时间线：仅公开（`permission=0`）动态进入 feed。
   - 关注流：公开动态全部可见；仅好友（`permission=1`）/仅粉丝（`permission=3`）动态需作者回关查看者才可见；仅自己（`permission=2`）动态不进入 feed。
 - **文章**：仅非章节文章（`novel_id=0`）进入 feed；小说章节通过文章详情接口访问。
-
-### 排序
-
-- 时间线：按发布时间倒序。
-- 关注流：按发布时间倒序。
-- 动态与文章混合时按发布时间倒序合并，同一时间按 id 倒序。
 
 ## 拉取时间线
 
@@ -51,7 +54,7 @@ Feed（信息流）接口：按类型拉取动态与文章的混合信息流。
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `content` | string | 否 | 内容类型过滤：`all`/`moment`/`article`，默认 `all` |
+| `content` | string | 否 | 内容类型过滤：`all`/`moment`/`article`，默认 `all`（`novel` 与 `sort=hot` 仅用户内容流支持） |
 | `offset` | number | 否 | 偏移量，默认 `0` |
 | `limit` | number | 否 | 每页条数，默认 `20`，最大 `50` |
 
@@ -186,7 +189,7 @@ curl -i "http://localhost:3000/api/v1/feeds/timeline?content=all&offset=0&limit=
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `content` | string | 否 | 内容类型过滤：`all`/`moment`/`article`，默认 `all` |
+| `content` | string | 否 | 内容类型过滤：`all`/`moment`/`article`，默认 `all`（`novel` 与 `sort=hot` 仅用户内容流支持） |
 | `offset` | number | 否 | 偏移量，默认 `0` |
 | `limit` | number | 否 | 每页条数，默认 `20`，最大 `50` |
 
@@ -207,4 +210,62 @@ curl -i "http://localhost:3000/api/v1/feeds/following?content=all&offset=0&limit
 | --- | --- |
 | `400` | `content` 取值非法、`offset`/`limit` 取值非法 |
 | `401` | 未登录，body 中 `code` 为 `40101`（见 `API-errors.md`） |
+| `500` | 数据库查询异常 |
+
+## 拉取用户内容流
+
+### `GET /api/v1/feeds/user/:uid`
+
+拉取指定用户发布的全部内容（动态 + 文章 + 小说元数据，按 `content` 过滤），按 `sort` 排序。**需要登录**。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `uid` | number | 是 | 目标用户 ID（路径参数），大于 0；可为当前登录用户自己 |
+| `content` | string | 否 | 内容类型过滤：`all`/`moment`/`article`/`novel`，默认 `all` |
+| `sort` | string | 否 | 排序：`time` 按发布时间倒序（默认）、`hot` 按点赞量倒序（同点赞按发布时间倒序） |
+| `offset` | number | 否 | 偏移量，默认 `0` |
+| `limit` | number | 否 | 每页条数，默认 `20`，最大 `50` |
+
+#### 请求示例
+
+```bash
+curl -i "http://localhost:3000/api/v1/feeds/user/20002?content=moment&sort=hot&offset=0&limit=20" \
+  -b cookie.txt
+
+curl -i "http://localhost:3000/api/v1/feeds/user/20002?content=novel&sort=time&offset=0&limit=20" \
+  -b cookie.txt
+```
+
+#### 成功响应
+
+与时间线一致（`200 OK`），额外说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `items[].type` | string | 内容类型：`moment` 动态 / `article` 文章（`content=novel` 时指小说根文章） |
+| `items[].chapter_count` | number | 小说根文章（`article_type=2` 且 `novel_id=0`）的已发布章节数，其余为 `0` |
+| `items[].stats.likes` | number | 点赞数（`sort=hot` 时按此降序） |
+
+#### 可见性规则
+
+- 动态可见性与内容列表一致：公开全部可见；仅好友/仅粉丝需作者回关查看者；仅自己（`permission=2`）仅本人可见。
+- 文章/小说仅返回 `status=normal` 的非章节记录（`novel_id=0`）；小说章节通过文章详情/分段接口获取。
+- 拉黑/被拉黑/屏蔽/不想看关系存在时返回 `40301`；目标用户账号被封禁（不允许登录）返回 `40303`。
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `content`/`sort`/`offset`/`limit` 取值非法、`uid` 非法 |
+| `401` | 未登录，body 中 `code` 为 `40101`（见 `API-errors.md`） |
+| `403` | 与目标用户存在拉黑/被拉黑关系（`code` 为 `40301`）；目标用户账号被封禁（`code` 为 `40303`） |
+| `404` | 目标用户不存在 |
 | `500` | 数据库查询异常 |

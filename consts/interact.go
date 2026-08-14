@@ -37,6 +37,14 @@ const (
 	ActionUnlike   = "unlike"
 )
 
+// 关注关系状态（以当前查看者为视角，用于关注/粉丝列表返回）。
+const (
+	FollowStatusNone       uint8 = 0 // 未关注：双方无关注关系
+	FollowStatusFollowing  uint8 = 1 // 已关注：查看者关注了对方
+	FollowStatusFollowedBy uint8 = 2 // 被关注：对方关注了查看者
+	FollowStatusMutual     uint8 = 3 // 互相关注
+)
+
 const (
 	DefaultListLimit = 20
 	MaxListLimit     = 100

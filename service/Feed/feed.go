@@ -12,6 +12,7 @@ import (
 	"errors"
 	"sort"
 
+	"gorm.io/gorm"
 	"miaoverse/consts"
 	modelarticle "miaoverse/model/dao/article"
 	modelmoment "miaoverse/model/dao/moment"
@@ -22,8 +23,10 @@ import (
 
 // QueryParams feed 查询参数。
 type QueryParams struct {
-	Type    string // consts.FeedTypeTimeline / FeedTypeFollowing
-	Content string // consts.FeedContentMoment / FeedContentArticle / FeedContentAll
+	Type    string // consts.FeedTypeTimeline / FeedTypeFollowing / FeedTypeUser
+	Content string // consts.FeedContentMoment / FeedContentArticle / FeedContentNovel / FeedContentAll
+	Sort    string // consts.FeedSortTime / FeedSortHot（默认 time）
+	UserID  uint32 // FeedTypeUser 时的目标用户 ID
 	Offset  int
 	Limit   int
 }
@@ -42,6 +45,8 @@ func Build(ctx context.Context, servants *server.Servants, uid uint32, params Qu
 		return buildTimeline(ctx, servants, uid, params)
 	case consts.FeedTypeFollowing:
 		return buildFollowing(ctx, servants, uid, params)
+	case consts.FeedTypeUser:
+		return buildUser(ctx, servants, uid, params)
 	default:
 		return nil, errors.New("unsupported feed type")
 	}
@@ -112,6 +117,181 @@ func buildFollowing(ctx context.Context, servants *server.Servants, uid uint32, 
 		return nil, err
 	}
 	return &Result{Count: count, Items: items}, nil
+}
+
+// buildUser 用户内容流：某个用户发布的全部内容（动态 + 文章 + 小说元数据 + 章节数）。
+// 动态按可见性（与关注流一致：公开全部可见，仅好友/仅粉丝需作者回关查看者，仅自己仅本人）；
+// 文章/小说（元数据 + 章节数）按 status=normal 且非章节记录返回。
+// 排序：time 按发布时间倒序；hot 按点赞量倒序（同点赞按发布时间倒序）。
+// 拉黑/屏蔽/不想看校验由调用方（handler 中间件）完成。
+func buildUser(ctx context.Context, servants *server.Servants, uid uint32, params QueryParams) (*Result, error) {
+	targetID := params.UserID
+	hot := params.Sort == consts.FeedSortHot
+
+	// 动态可见性：isFriend（互相关注）/isFan（作者关注了查看者）
+	var isFriend, isFan bool
+	if uid != 0 && uid != targetID {
+		following, err := servants.InteractsServant.IsFollowing(uid, targetID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		followedBy, err := servants.InteractsServant.IsFollowing(targetID, uid)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		isFriend, isFan = following && followedBy, followedBy
+	}
+
+	// hot 且 content=all 时：动态/文章各取 offset+limit 条，合并后全局热序再取 [offset, offset+limit)，
+	// 避免"各自分页再拼接"导致第 N 页内容错位（单分类场景 SQL 层直接分页即可）。
+	hotAll := hot && params.Content == consts.FeedContentAll
+	fetchOffset, fetchLimit := params.Offset, params.Limit
+	if hotAll {
+		fetchLimit = params.Offset + params.Limit
+	}
+
+	var moments []modelmoment.Moment
+	if params.Content == consts.FeedContentMoment || params.Content == consts.FeedContentAll {
+		var err error
+		if hot {
+			moments, err = servants.ContentServant.QueryVisibleHotMomentsByUser(uid, targetID, isFriend, isFan, fetchOffset, fetchLimit)
+		} else {
+			moments, err = servants.ContentServant.QueryVisibleMomentsByUser(uid, targetID, isFriend, isFan, params.Offset, params.Limit)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var articles []modelarticle.Metadata
+	if params.Content == consts.FeedContentArticle || params.Content == consts.FeedContentNovel || params.Content == consts.FeedContentAll {
+		var err error
+		switch params.Content {
+		case consts.FeedContentNovel:
+			if hot {
+				articles, err = servants.ArticleServant.QueryUserHotMetadatasByType(targetID, consts.ArticleTypeNovel, consts.ArticleStatusNormal, params.Offset, params.Limit)
+			} else {
+				articles, err = servants.ArticleServant.QueryUserNovels(targetID, consts.ArticleStatusNormal, params.Offset, params.Limit)
+			}
+		case consts.FeedContentArticle:
+			if hot {
+				articles, err = servants.ArticleServant.QueryUserHotMetadatasByType(targetID, consts.ArticleTypeNormal, consts.ArticleStatusNormal, params.Offset, params.Limit)
+			} else {
+				articles, err = servants.ArticleServant.QueryUserMetadatasByType(targetID, consts.ArticleTypeNormal, consts.ArticleStatusNormal, params.Offset, params.Limit)
+			}
+		default: // all
+			if hot {
+				articles, err = servants.ArticleServant.QueryUserHotMetadatas(targetID, consts.ArticleStatusNormal, fetchOffset, fetchLimit)
+			} else {
+				articles, err = servants.ArticleServant.QueryUserMetadatasAll(targetID, consts.ArticleStatusNormal, params.Offset, params.Limit)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	items, err := assemble(ctx, servants, uid, moments, articles)
+	if err != nil {
+		return nil, err
+	}
+
+	// is_following：查看者是否关注了目标用户（用户内容流全部条目同属一个作者，查询一次回填）
+	if uid != 0 && uid != targetID && len(items) > 0 {
+		following, err := servants.InteractsServant.IsFollowing(uid, targetID)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		if following {
+			for i := range items {
+				items[i].IsFollowing = true
+			}
+		}
+	}
+
+	if hotAll {
+		// 全局热序后截取本页
+		sortHotItems(items)
+		items = pageSlice(items, params.Offset, params.Limit)
+	}
+
+	// 小说章节数：批量统计后回填
+	novelIDs := make([]uint64, 0, len(items))
+	for i := range items {
+		if items[i].Type == consts.ContentTypeArticle && items[i].ArticleType == consts.ArticleTypeNovel && items[i].NovelID == 0 {
+			novelIDs = append(novelIDs, items[i].ID)
+		}
+	}
+	if len(novelIDs) > 0 {
+		chapterCounts, err := servants.ArticleServant.CountChaptersByNovels(novelIDs)
+		if err != nil {
+			return nil, err
+		}
+		for i := range items {
+			if items[i].Type == consts.ContentTypeArticle {
+				items[i].ChapterCount = chapterCounts[items[i].ID]
+			}
+		}
+	}
+
+	var count int64
+	switch params.Content {
+	case consts.FeedContentMoment:
+		c, err := servants.ContentServant.CountVisibleMomentsByUser(uid, targetID, isFriend, isFan)
+		if err != nil {
+			return nil, err
+		}
+		count = c
+	case consts.FeedContentArticle:
+		c, err := servants.ArticleServant.CountUserMetadatasByType(targetID, consts.ArticleTypeNormal, consts.ArticleStatusNormal)
+		if err != nil {
+			return nil, err
+		}
+		count = c
+	case consts.FeedContentNovel:
+		c, err := servants.ArticleServant.CountUserNovels(targetID, consts.ArticleStatusNormal)
+		if err != nil {
+			return nil, err
+		}
+		count = c
+	default: // all
+		c1, err := servants.ContentServant.CountVisibleMomentsByUser(uid, targetID, isFriend, isFan)
+		if err != nil {
+			return nil, err
+		}
+		c2, err := servants.ArticleServant.CountUserMetadatasAll(targetID, consts.ArticleStatusNormal)
+		if err != nil {
+			return nil, err
+		}
+		count = c1 + c2
+	}
+
+	return &Result{Count: count, Items: items}, nil
+}
+
+// sortHotItems 按点赞量倒序排序 feed 条目（同点赞按发布时间倒序）。
+func sortHotItems(items []resp.FeedItem) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Stats.Likes != items[j].Stats.Likes {
+			return items[i].Stats.Likes > items[j].Stats.Likes
+		}
+		if !items[i].CreatedAt.Equal(items[j].CreatedAt) {
+			return items[i].CreatedAt.After(items[j].CreatedAt)
+		}
+		return items[i].ID > items[j].ID
+	})
+}
+
+// pageSlice 返回已整体排序列表的第 offset 页（每页 limit 条）；越界返回空切片。
+func pageSlice(items []resp.FeedItem, offset, limit int) []resp.FeedItem {
+	if offset >= len(items) {
+		return nil
+	}
+	end := offset + limit
+	if end > len(items) {
+		end = len(items)
+	}
+	return items[offset:end]
 }
 
 // queryBoth 按 content 过滤参数分别查询动态与文章（各取 offset/limit 条，内存合并后截断）。
