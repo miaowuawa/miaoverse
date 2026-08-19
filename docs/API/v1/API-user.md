@@ -9,7 +9,7 @@
 | 分组 | 前缀 | 是否需要登录 | 内容 |
 | --- | --- | --- | --- |
 | 认证 | `/api/v1/auth` | 否（账号列表/切换需登录） | 短信验证码、登录、注册、切换账号 |
-| 动态 | `/api/v1/moment` | 是 | 发布动态、获取动态详情、评论/回复（楼中楼）、给动态点赞，见 `api-moments.md` |
+| 动态 | `/api/v1/moment` | 是 | 发布动态、获取动态详情、评论/回复（楼中楼）、给动态/评论点赞，见 `api-moments.md` |
 | 用户 | `/api/v1/user` | 是 | 资料、文件、关注、拉黑/屏蔽/不想看、惩罚记录、查看他人资料/内容/关系 |
 除认证组外，其余分组接口均要求登录（`mwu_sess_id` cookie）且账号状态正常；被权限封禁的账号按各接口说明返回 `40302`。
 
@@ -618,7 +618,7 @@ curl -i http://localhost:3000/api/v1/user/me \
   "username": "miaoverse_user",
   "nickname": "Miaowu",
   "region": 86,
-  "avatar": "https://example.com/avatar.png",
+  "avatar": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d",
   "bio": "Hello, Miaoverse!",
   "gender": 0
 }
@@ -631,7 +631,7 @@ curl -i http://localhost:3000/api/v1/user/me \
 | `username` | string | 是 | 用户名，1-64 字符 |
 | `nickname` | string | 是 | 昵称，1-64 字符 |
 | `region` | number | 是 | 用户资料地区，必须大于 0 |
-| `avatar` | string | 是 | 头像 URL，可为空字符串，最长 255 字符 |
+| `avatar` | string | 是 | 头像文件 UUID，可为空字符串，最长 255 字符。设置头像请使用 `PUT /api/v1/user/avatar`（会校验文件归属与公开性），此处仅做长度校验 |
 | `bio` | string | 是 | 个性签名，可为空字符串，最长 255 字符。修改时要求未被封禁签名权限位，否则返回 `403`，body 中 `code` 为 `40302` |
 | `gender` | number | 是 | `0` 未知，`1` 男，`2` 女，`3` 非二元性别 |
 
@@ -647,7 +647,7 @@ curl -i http://localhost:3000/api/v1/user/me \
     "username": "miaoverse_user",
     "nickname": "Miaowu",
     "region": 86,
-    "avatar": "https://example.com/avatar.png",
+    "avatar": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d",
     "bio": "Hello, Miaoverse!",
     "gender": 0,
     "status": 1,
@@ -681,9 +681,7 @@ curl -i -X PATCH http://localhost:3000/api/v1/user/info \
 
 ## 用户文件
 
-以下接口都挂在 `/api/v1/user` 登录态路由下，必须携带有效 `mwu_sess_id` cookie。
-
-### `POST /api/v1/user/files`
+以下接口都挂在 `/api/v1/user` 登录态路由下，必须携带有效 `mwu_sess_id` cookie。### `POST /api/v1/user/files`
 
 上传当前登录用户的文件。文件会写入 S3，并在数据库 `files` 表中创建记录。
 如果已存在相同 SHA-256 hash 的 active 文件，服务会复用已有 S3 对象链接，只创建新的数据库记录，避免重复上传。
@@ -827,6 +825,101 @@ curl -i http://localhost:3000/api/v1/user/files/15b3d25d-66cc-4ddc-9949-33c9e84d
 | `404` | 文件不存在或已删除（非 active 状态）；未登录访问非公开文件 |
 | `503` | S3 未启用或文件存储服务不可用 |
 | `500` | S3 临时链接生成或数据库查询异常 |
+
+## 用户头像
+
+头像使用文件 UUID 表示（`user.avatar` 字段存文件 UUID，不再存 URL）。设置头像复用文件上传接口：先上传图片（`permission=0` 公开），再用返回的 UUID 调用设置头像接口。头像为公开可见文件，获取头像不受拉黑/屏蔽/账号封禁影响。
+
+### `PUT /api/v1/user/avatar`
+
+设置当前登录用户的头像。头像文件必须是当前用户自己的 active 图片文件，且必须公开（`permission=0`），否则返回 `400`。修改头像需要未被封禁头像权限位（`PermAvatar`，bit3），否则返回 `403`，body 中 `code` 为 `40302`。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "avatar_uuid": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d"
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+| --- | --- | --- | --- | --- |
+| `avatar_uuid` | string | 是 | UUID v4 格式 | 头像文件 UUID，必须是本人 active 图片文件且公开（`permission=0`） |
+
+#### 请求示例
+
+```bash
+curl -i -X PUT http://localhost:3000/api/v1/user/avatar \
+  -H "Content-Type: application/json" \
+  -b cookie.txt \
+  -d '{"avatar_uuid":"15b3d25d-66cc-4ddc-9949-33c9e84d8c5d"}'
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "头像设置成功",
+  "avatar": {
+    "avatar_uuid": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d"
+  }
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、`avatar_uuid` 缺失/格式非法、文件不存在/非 active/不属于当前用户/非图片类型/未公开分享 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 头像权限被封禁（`code` 为 `40302`） |
+| `500` | 数据库异常 |
+
+### `GET /api/v1/user/users/:uid/avatar`
+
+获取任意用户当前头像的文件 UUID。头像为公开可见文件，不受拉黑/屏蔽/账号封禁影响，无需登录。
+
+#### 请求示例
+
+```bash
+curl -i http://localhost:3000/api/v1/user/users/20002/avatar
+```
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "avatar": {
+    "avatar_uuid": "15b3d25d-66cc-4ddc-9949-33c9e84d8c5d"
+  }
+}
+```
+
+`avatar_uuid` 为空字符串表示用户未设置头像。拿到 UUID 后，通过 `GET /api/v1/user/files/:uuid/shared-link` 换取临时访问 URL 展示。
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `uid` 非法 |
+| `404` | 目标用户不存在 |
+| `500` | 数据库查询异常 |
 
 ## 拉黑/屏蔽/不想看
 

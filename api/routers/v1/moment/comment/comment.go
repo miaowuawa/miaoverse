@@ -122,6 +122,45 @@ func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	return resp.ReplyCreated(ctx, toReplyInfo(created, moment.ID, replied.UserID))
 }
 
+// LikeCommentHandler 给评论点赞。内容屏蔽校验由 RequireNoContentBlock、拉黑校验由 RequireNoBlockUser 中间件完成。
+func LikeCommentHandler(ctx fiber.Ctx, servants *server.Servants) error {
+	uid, ok := middleware.CurrentUID(ctx)
+	if !ok {
+		return resp.Unauthorized(ctx)
+	}
+
+	comment, ok := middleware.BlockComment(ctx)
+	if !ok {
+		return resp.BadRequest(ctx)
+	}
+
+	if err := servants.InteractsServant.LikeCommentAndMeta(uid, comment.ID, comment.UserID); err != nil {
+		return resp.ServerError(ctx)
+	}
+
+	return resp.InteractOK(ctx, comment.ID, consts.ActionLike)
+}
+
+// UnlikeCommentHandler 取消评论点赞（幂等：未点赞时直接返回成功）。
+// 内容屏蔽校验由 RequireNoContentBlock、拉黑校验由 RequireNoBlockUser 中间件完成。
+func UnlikeCommentHandler(ctx fiber.Ctx, servants *server.Servants) error {
+	uid, ok := middleware.CurrentUID(ctx)
+	if !ok {
+		return resp.Unauthorized(ctx)
+	}
+
+	comment, ok := middleware.BlockComment(ctx)
+	if !ok {
+		return resp.BadRequest(ctx)
+	}
+
+	if err := servants.InteractsServant.UnlikeCommentAndMeta(uid, comment.ID); err != nil {
+		return resp.ServerError(ctx)
+	}
+
+	return resp.InteractOK(ctx, comment.ID, consts.ActionUnlike)
+}
+
 // ConversationHandler 获取楼中楼完整对话：传入楼中楼首条评论 id，返回该评论及全部子孙回复。
 func ConversationHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if _, ok := middleware.CurrentUID(ctx); !ok {

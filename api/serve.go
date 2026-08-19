@@ -163,6 +163,20 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		func(c fiber.Ctx) error {
 			return usercomment.ReplyHandler(c, servants)
 		})
+	// 给评论点赞。校验与回复评论一致：先校验内容是否被屏蔽（评论及其上溯链/所属动态），再校验与评论作者的拉黑关系。
+	commentGroup.Post("/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentBodyAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentBodyAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return usercomment.LikeCommentHandler(c, servants)
+		})
+	// 取消评论点赞（幂等）。校验与点赞一致。
+	commentGroup.Delete("/likes", middleware.RequireNotPunished(servants, consts.PermSocial),
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentBodyAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentBodyAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return usercomment.UnlikeCommentHandler(c, servants)
+		})
 	// 获取楼中楼完整对话（传入楼中楼首条评论 id）。
 	commentGroup.Get("/moments/:id/conversation",
 		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveCommentMomentAuthor}),
@@ -180,6 +194,15 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	})
 	userGroup.Patch("/info", func(c fiber.Ctx) error {
 		return profile.UpdatePartialHandler(c, servants)
+	})
+	// 设置头像：头像文件必须是本人 active 图片且公开（permission=0），
+	// 修改头像需要未被封禁 PermAvatar 权限位（40302）。
+	userGroup.Put("/avatar", func(c fiber.Ctx) error {
+		return profile.UpdateAvatarHandler(c, servants)
+	})
+	// 获取任意用户头像文件 UUID（公开可见，不受拉黑/屏蔽影响）
+	userGroup.Get("/users/:uid/avatar", func(c fiber.Ctx) error {
+		return profile.GetAvatarHandler(c, servants)
 	})
 	userGroup.Post("/files", func(c fiber.Ctx) error {
 		return userfile.UploadHandler(c, servants)

@@ -60,6 +60,8 @@ const (
 	OKAccountList           MessageKey = "ok.account_list"
 	OKLogout                MessageKey = "ok.logout"
 	OKUserInfoUpdated       MessageKey = "ok.user_info_updated"
+	OKAvatarUpdated         MessageKey = "ok.avatar_updated"
+	OKAvatarFetched         MessageKey = "ok.avatar_fetched"
 	OKFileUploaded          MessageKey = "ok.file_uploaded"
 	OKFileTempLink          MessageKey = "ok.file_temp_link"
 	OKMomentPublished       MessageKey = "ok.moment_published"
@@ -431,6 +433,8 @@ func resetCatalog() {
 			OKAccountList:           {Other: "获取成功"},
 			OKLogout:                {Other: "退出登录成功"},
 			OKUserInfoUpdated:       {Other: "用户信息修改成功"},
+			OKAvatarUpdated:         {Other: "头像设置成功"},
+			OKAvatarFetched:         {Other: "获取成功"},
 			OKMomentPublished:       {Other: "发布成功"},
 			OKMomentUpdated:         {Other: "修改成功"},
 			OKMomentDetailFetched:   {Other: "获取成功"},

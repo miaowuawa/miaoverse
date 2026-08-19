@@ -12,6 +12,8 @@
 | 评论动态 | `POST /api/v1/comment/moments` | 是 |
 | 回复评论（楼中楼） | `POST /api/v1/comment/moments/:id/replies` | 是 |
 | 获取楼中楼完整对话 | `GET /api/v1/comment/moments/:id/conversation` | 是 |
+| 给评论点赞 | `POST /api/v1/comment/likes` | 是 |
+| 取消评论点赞 | `DELETE /api/v1/comment/likes` | 是 |
 | 给动态点赞 | `POST /api/v1/moment/likes` | 是 |
 | 取消动态点赞 | `DELETE /api/v1/moment/likes` | 是 |
 
@@ -502,6 +504,117 @@ curl -i "http://localhost:3000/api/v1/comment/moments/1/conversation?offset=0&li
 | `451` | 所属动态或上溯链上的评论被屏蔽（`status=4`），body 中 `code` 为 `45101` |
 | `500` | 数据库查询异常 |
 
+## 给评论点赞
+
+### `POST /api/v1/comment/likes`
+
+给评论点赞（含楼中楼回复）。被拉黑/拉黑评论作者不能点赞。点赞会写入 `interacts` 表（`type=1 点赞`、`target_type=2 评论`、`user_to` 为评论作者），并同步自增评论的点赞计数（`comment_interact_count.like_count`）。
+
+规则：
+
+- 需要登录且账号状态正常。
+- 社交互动权限封禁（`PermSocial`）期间不可点赞，返回 `40302`。
+- 评论存在且状态正常；与评论作者存在任意一方拉黑关系时不可点赞，返回 `40301`。
+- 评论所属动态及其上溯链上的评论被屏蔽（`status=4`）时不可点赞，返回 `45101`（口径与回复评论一致）。
+- 支持给自己的评论点赞、给楼中楼回复点赞。
+- 幂等与并发安全：同一用户对同一评论仅保留一条点赞记录（`interacts.single_key` 唯一约束），重复点赞直接返回成功且不重复计数。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "comment_id": 1
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+| --- | --- | --- | --- | --- |
+| `comment_id` | number | 是 | 大于 0 | 要点赞的评论 ID |
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "操作成功",
+  "target": 1,
+  "action": "like"
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、`comment_id` 为 0 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 社交互动权限封禁（`code` 为 `40302`）；拉黑/被拉黑关系（`code` 为 `40301`） |
+| `404` | 评论不存在或已删除 |
+| `451` | 所属动态或上溯链上的评论被屏蔽（`status=4`），body 中 `code` 为 `45101` |
+| `500` | 数据库异常 |
+
+## 取消评论点赞
+
+### `DELETE /api/v1/comment/likes`
+
+取消对评论的点赞（幂等：未点赞时直接返回成功）。取消点赞会同步自减评论的点赞计数。校验与点赞一致。
+
+#### 请求头
+
+| 名称 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | `application/json` |
+| `Cookie` | 是 | 已登录 session 的 `mwu_sess_id` |
+
+#### 请求体
+
+```json
+{
+  "comment_id": 1
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 必填 | 校验规则 | 说明 |
+| --- | --- | --- | --- | --- |
+| `comment_id` | number | 是 | 大于 0 | 要取消点赞的评论 ID |
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "操作成功",
+  "target": 1,
+  "action": "unlike"
+}
+```
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | 请求体不是 JSON、`comment_id` 为 0 |
+| `401` | 未登录或 session 中没有 `UID` |
+| `403` | 社交互动权限封禁（`code` 为 `40302`）；拉黑/被拉黑关系（`code` 为 `40301`） |
+| `404` | 评论不存在或已删除 |
+| `451` | 所属动态或上溯链上的评论被屏蔽（`status=4`），body 中 `code` 为 `45101` |
+| `500` | 数据库异常 |
+
 ## 给动态点赞
 
 ### `POST /api/v1/moment/likes`
@@ -509,6 +622,8 @@ curl -i "http://localhost:3000/api/v1/comment/moments/1/conversation?offset=0&li
 给动态点赞。被拉黑/拉黑对方不能点赞。点赞会同步自增动态的点赞计数。
 
 > 动态相关接口统一挂在 `/moment/` 分组下。后续文章等类型使用各自的子路径（如 `/article/likes`），不提供通用的 `/likes`。
+>
+> 幂等与并发安全：同一用户对同一动态仅保留一条点赞记录（`interacts.single_key` 唯一约束），重复点赞直接返回成功且不重复计数；取消点赞后再点赞会恢复为正常状态。
 
 #### 请求头
 

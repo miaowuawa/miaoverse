@@ -266,18 +266,48 @@ func ResolveCommentMomentAuthor(ctx fiber.Ctx, servants *server.Servants) (uint3
 	return moment.UserID, nil
 }
 
-// loadCommentByPathID 从路径参数 :id 解析评论，校验存在且状态正常，并缓存评论对象。
-// 评论被屏蔽（CommentStatusBlocked）时返回 errContentBlocked（45101），删除/草稿等视为不存在。
-// 已缓存时直接复用（多个中间件叠加时避免重复查询）。
-func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelinteracts.Comment, error) {
-	if comment, ok := BlockComment(ctx); ok {
-		return comment, nil
+// ResolveCommentBodyAuthor 评论点赞场景的目标解析器：按 body 中 comment_id 查评论，
+// 沿 target 链上溯校验所属动态可见（口径与回复评论一致），返回评论作者 ID 并缓存评论对象
+// （handler 复用，避免重复查询）。
+func ResolveCommentBodyAuthor(ctx fiber.Ctx, servants *server.Servants) (uint32, error) {
+	var body struct {
+		CommentID uint64 `json:"comment_id"`
+	}
+	if err := json.Unmarshal(ctx.Body(), &body); err != nil || body.CommentID == 0 {
+		return 0, errBlockTargetMissing
 	}
 
+	comment, err := loadComment(ctx, servants, body.CommentID)
+	if err != nil {
+		return 0, err
+	}
+	root, moment, err := resolveCommentRoot(comment, servants)
+	if err != nil {
+		return 0, err
+	}
+	ctx.Locals(consts.BlockCommentRootKey, root)
+	ctx.Locals(consts.BlockMomentLocalKey, moment)
+	return comment.UserID, nil
+}
+
+// loadCommentByPathID 从路径参数 :id 解析评论，校验存在且状态正常，并缓存评论对象。
+// 评论被屏蔽（CommentStatusBlocked）时返回 errContentBlocked（45101），删除/草稿等视为不存在。
+func loadCommentByPathID(ctx fiber.Ctx, servants *server.Servants) (*modelinteracts.Comment, error) {
 	id, err := strconv.ParseUint(strings.TrimSpace(ctx.Params("id")), 10, 64)
 	if err != nil || id == 0 {
 		return nil, errBlockTargetMissing
 	}
+	return loadComment(ctx, servants, id)
+}
+
+// loadComment 按评论 ID 解析评论，校验存在且状态正常，并缓存评论对象。
+// 评论被屏蔽（CommentStatusBlocked）时返回 errContentBlocked（45101），删除/草稿等视为不存在。
+// 已缓存时直接复用（多个中间件叠加时避免重复查询）。
+func loadComment(ctx fiber.Ctx, servants *server.Servants, id uint64) (*modelinteracts.Comment, error) {
+	if comment, ok := BlockComment(ctx); ok {
+		return comment, nil
+	}
+
 	comment, err := servants.InteractsServant.QueryCommentByID(id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

@@ -122,6 +122,28 @@ func FileTempLink(ctx fiber.Ctx, fileUUID string, url string, expiresAt time.Tim
 	})
 }
 
+// AvatarUpdated 头像设置成功响应，返回头像文件 UUID（不返回原始存储 URL）。
+func AvatarUpdated(ctx fiber.Ctx, avatarUUID string) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgAvatar{
+		Code: fiber.StatusOK,
+		Msg:  i18n.Message(ctx, i18n.OKAvatarUpdated),
+		Avatar: AvatarInfo{
+			AvatarUUID: avatarUUID,
+		},
+	})
+}
+
+// AvatarFetched 头像获取成功响应，返回头像文件 UUID（不返回原始存储 URL）。
+func AvatarFetched(ctx fiber.Ctx, avatarUUID string) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgAvatar{
+		Code: fiber.StatusOK,
+		Msg:  i18n.Message(ctx, i18n.OKAvatarFetched),
+		Avatar: AvatarInfo{
+			AvatarUUID: avatarUUID,
+		},
+	})
+}
+
 func MomentPublished(ctx fiber.Ctx, moment MomentInfo) error {
 	return ctx.Status(fiber.StatusCreated).JSON(CodeWithMsgMoment{
 		Code:   fiber.StatusCreated,

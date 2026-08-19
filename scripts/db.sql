@@ -132,10 +132,16 @@ CREATE TABLE IF NOT EXISTS `interacts` (
     `target_type`  TINYINT UNSIGNED NOT NULL COMMENT '0 user, 1 moment, 2 comment, 3 reply',
     `status`       TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 normal, 9 revoked, 10 forced revoked',
     `acted_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `single_key`   VARCHAR(64) GENERATED ALWAYS AS (
+                       IF(`type` IN (0, 1, 2, 3, 4),
+                          CONCAT(`user_from`, ':', `target_id`, ':', `type`, ':', `target_type`),
+                          NULL)
+                   ) STORED COMMENT 'unique key for single-instance interactions (follow/like/share/repost/favorite), NULL for multi-instance types',
     PRIMARY KEY (`id`),
     KEY `idx_interacts_user_from` (`user_from`),
     KEY `idx_interacts_user_to` (`user_to`),
     KEY `idx_interacts_target` (`target_id`, `type`, `status`),
+    UNIQUE KEY `uk_interacts_single_key` (`single_key`),
     CONSTRAINT `fk_interacts_user_from`
         FOREIGN KEY (`user_from`) REFERENCES `user` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE,
@@ -161,6 +167,16 @@ CREATE TABLE IF NOT EXISTS `comment` (
         FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='comments';
+
+CREATE TABLE IF NOT EXISTS `comment_interact_count` (
+    `comment_id` BIGINT UNSIGNED NOT NULL COMMENT 'comment.id',
+    `like_count` INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT 'like count',
+    `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`comment_id`),
+    CONSTRAINT `fk_comment_interact_count_comment_id`
+        FOREIGN KEY (`comment_id`) REFERENCES `comment` (`id`)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='comment interact counters';
 
 CREATE TABLE IF NOT EXISTS `notify` (
     `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'notify id',
