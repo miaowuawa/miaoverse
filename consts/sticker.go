@@ -35,7 +35,7 @@ const (
 	DefaultStickerMaxFileSizeBytes int64 = 10 * 1024 * 1024 // 单张贴纸最大字节数（默认 10MB，可配置覆盖）
 	MaxStickerFavorites                  = 500              // 个人收藏夹贴纸数量上限（含收藏他人贴纸）
 	MaxStickerPackItems                  = 100              // 单个贴纸包贴纸数量上限
-	MaxCommentStickerTokens              = 1                // 一条评论最多使用的贴纸数
+	MaxCommentStickerTokens              = 25               // 一条评论最多使用的贴纸数
 	MaxStickerNameLen                    = 64               // 贴纸名称最大长度
 	MaxStickerPackNameLen                = 64               // 贴纸包名称最大长度
 	MaxStickerPackDescLen                = 255              // 贴纸包描述最大长度

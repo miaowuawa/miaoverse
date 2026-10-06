@@ -18,6 +18,7 @@ import (
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
 	"miaoverse/service/DBMigration"
+	"miaoverse/service/Notify"
 	"miaoverse/service/UserBlock"
 	storagemongo "miaoverse/service/mongo"
 	storages3 "miaoverse/service/s3"
@@ -126,6 +127,20 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 
 	//init user block bitmap servant
 	blockServant := UserBlock.NewServant(smsRedisClient, conf.Cache.DB)
+
+	//init notify redis client（在线状态 + 跨实例通知事件总线，存 cache db）
+	notifyRedisClient := redis.NewClient(&redis.Options{
+		Username: conf.Redis.Username,
+		Password: conf.Redis.Password,
+		Addr:     conf.Redis.Host + ":" + strconv.Itoa(conf.Redis.Port),
+		DB:       conf.Cache.DB,
+	})
+	if status := notifyRedisClient.Ping(smsRedisCtx); status.Err() != nil {
+		return nil, status.Err()
+	}
+
+	//init notify servant（通知落库 + SSE 推送 + 在线状态/跨实例事件总线）
+	notifyServant := Notify.NewServant(userdao, notifyRedisClient)
 	//step3 validator
 	validator := validator2.New()
 	err = util.Validate.InitialValidator(validator)
@@ -186,6 +201,7 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		StickerServant:      stickerdao,
 		ArticleServant:      articleServant,
 		BlockServant:        blockServant,
+		NotifyServant:       notifyServant,
 		Validator:           validator,
 		S3Servant:           s3Servant,
 		MongoServant:        mongoServant,

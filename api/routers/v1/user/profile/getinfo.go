@@ -49,10 +49,18 @@ func GetUserInfoHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
+	// 手机号是账号凭据信息，只在「查询自己」时返回，且一律返回打码值；
+	// 查询他人资料时字段为空并由 omitempty 省略，避免任何形式的手机号泄露。
+	phone := ""
+	if targetID == uid {
+		phone = MaskedSessionPhone(ctx)
+	}
+
 	return resp.UserInfoOK(ctx, resp.UserInfo{
 		User:           *user,
 		BlockStatus:    blockStatus,
 		PunishmentMask: punishmentMask,
+		Phone:          phone,
 	})
 }
 

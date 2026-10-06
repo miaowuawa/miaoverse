@@ -245,7 +245,9 @@ func CommentList(ctx fiber.Ctx, count int64, comments []CommentInfo) error {
 	})
 }
 
+// ReplyCreated 返回新发表的楼中楼回复，已注销作者的展示字段统一打码。
 func ReplyCreated(ctx fiber.Ctx, reply ReplyInfo) error {
+	MaskClosedAccount(ctx, &reply.Author)
 	return ctx.Status(fiber.StatusCreated).JSON(CodeWithMsgReply{
 		Code:  fiber.StatusCreated,
 		Msg:   i18n.Message(ctx, i18n.OKReplyCreated),
@@ -253,8 +255,12 @@ func ReplyCreated(ctx fiber.Ctx, reply ReplyInfo) error {
 	})
 }
 
+// Conversation 返回楼中楼完整对话，已注销作者（首条评论与回复）的展示字段统一打码。
 func Conversation(ctx fiber.Ctx, conversation ConversationInfo) error {
 	MaskClosedAccount(ctx, &conversation.Root.Author)
+	for i := range conversation.Replies {
+		MaskClosedAccount(ctx, &conversation.Replies[i].Author)
+	}
 	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgConversation{
 		Code:         fiber.StatusOK,
 		Msg:          i18n.Message(ctx, i18n.OKConversationFetched),

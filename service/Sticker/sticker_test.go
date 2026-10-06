@@ -16,7 +16,7 @@ func TestBuildTokenAndExtractTokens(t *testing.T) {
 	if got := ExtractTokens("纯文本评论"); len(got) != 0 {
 		t.Fatalf("ExtractTokens plain = %v", got)
 	}
-	// 一条评论最多一个贴纸：多个标记会被检测出来（由 CheckCommentSticker 拒绝）
+	// 一条评论最多 25 张贴纸：多个标记会被检测出来（超过上限由 CheckCommentStickers 拒绝）
 	two := "a [sticker:" + testUUID + "] b [sticker:" + testUUID + "]"
 	if got := ExtractTokens(two); len(got) != 2 {
 		t.Fatalf("ExtractTokens multi = %v", got)
@@ -29,6 +29,21 @@ func TestBuildTokenAndExtractTokens(t *testing.T) {
 	upper := "[sticker:123E4567-E89B-12D3-A456-426614174000]"
 	if got := ExtractTokens(upper); len(got) != 1 || got[0] != testUUID {
 		t.Fatalf("ExtractTokens upper = %v", got)
+	}
+}
+
+func TestStripTokens(t *testing.T) {
+	// 正文长度限制按去除贴纸标记后的文字计算，贴纸标记不占正文字数
+	content := "你好 [sticker:" + testUUID + "] 世界 [sticker:" + testUUID + "]"
+	if got := StripTokens(content); got != "你好  世界 " {
+		t.Fatalf("StripTokens = %q", got)
+	}
+	if got := StripTokens("纯文本评论"); got != "纯文本评论" {
+		t.Fatalf("StripTokens plain = %q", got)
+	}
+	// 非法 UUID 形式的方括号内容原样保留
+	if got := StripTokens("[sticker:not-a-uuid]"); got != "[sticker:not-a-uuid]" {
+		t.Fatalf("StripTokens invalid = %q", got)
 	}
 }
 

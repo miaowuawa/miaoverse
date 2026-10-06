@@ -7,14 +7,16 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"gorm.io/gorm"
-	"miaoverse/consts"
 	"miaoverse/middleware"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/dto/user/updatereq"
 	"miaoverse/model/server"
+	"miaoverse/service/UserProfile"
 	"miaoverse/service/i18n"
 )
 
+// UpdateFullHandler 全量更新本人基础资料（账号名、昵称、头像、个性签名、性别）。
+// 用户身份一律取自登录会话，请求体中的用户标识字段不会被采纳，因此不存在越权改他人资料的路径。
 func UpdateFullHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if !ctx.IsJSON() {
 		return resp.BadRequest(ctx)
@@ -30,13 +32,22 @@ func UpdateFullHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.BadRequest(ctx)
 	}
 
-	updates, ok := fullUpdates(req)
+	fields, ok := fullFields(req)
 	if !ok {
 		return resp.BadRequest(ctx)
 	}
-	return updateProfile(ctx, servants, uid, updates)
+	// 头像涉及文件归属校验，无法放进纯函数校验里，单独追加
+	if req.Avatar != nil {
+		field, err := UserProfile.AvatarField(servants.UserServant, uid, *req.Avatar)
+		if err != nil {
+			return avatarError(ctx, err)
+		}
+		fields = append(fields, field)
+	}
+	return updateProfile(ctx, servants, uid, fields)
 }
 
+// UpdatePartialHandler 部分更新本人基础资料，只有显式传入的字段会被修改。
 func UpdatePartialHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if !ctx.IsJSON() {
 		return resp.BadRequest(ctx)
@@ -52,140 +63,133 @@ func UpdatePartialHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.BadRequest(ctx)
 	}
 
-	updates, ok := patchUpdates(req)
+	fields, ok := patchFields(req)
 	if !ok {
 		return resp.BadRequest(ctx)
 	}
-	return updateProfile(ctx, servants, uid, updates)
+	// 头像涉及文件归属校验，无法放进纯函数校验里，单独追加
+	if req.Avatar != nil {
+		field, err := UserProfile.AvatarField(servants.UserServant, uid, *req.Avatar)
+		if err != nil {
+			return avatarError(ctx, err)
+		}
+		fields = append(fields, field)
+	}
+	if len(fields) == 0 {
+		return resp.BadRequest(ctx)
+	}
+	return updateProfile(ctx, servants, uid, fields)
 }
 
-func updateProfile(ctx fiber.Ctx, servants *server.Servants, uid uint32, updates map[string]any) error {
-	// 修改个性签名需要未被封禁 PermSignature 权限位，否则返回 40302
-	if _, hasBio := updates["bio"]; hasBio {
-		punished, err := servants.UserServant.HasActivePunishment(uid, consts.PermSignature, time.Now())
-		if err != nil {
-			return resp.ServerError(ctx)
-		}
-		if punished {
-			return resp.Punished(ctx)
-		}
+// avatarError 把头像校验错误映射为响应：
+//   - ErrAvatarEmpty / ErrAvatarInvalid：400（文件不存在、非本人、非图片、非公开）
+//   - 其他：500
+//
+// PermAvatar 权限封禁由 UserProfile.Update 统一返回 ErrPunished，由 updateProfile 映射为 40302。
+func avatarError(ctx fiber.Ctx, err error) error {
+	if errors.Is(err, UserProfile.ErrAvatarEmpty) || errors.Is(err, UserProfile.ErrAvatarInvalid) {
+		return resp.BadRequest(ctx)
 	}
+	return resp.ServerError(ctx)
+}
 
-	user, err := servants.UserServant.UpdateProfile(uid, updates)
+func updateProfile(ctx fiber.Ctx, servants *server.Servants, uid uint32, fields []UserProfile.Field) error {
+	user, err := UserProfile.Update(servants.UserServant, uid, fields, time.Now())
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ctx.Status(fiber.StatusNotFound).JSON(resp.CodeWithMsg{
-				Code: fiber.StatusNotFound,
-				Msg:  i18n.Message(ctx, i18n.ErrUserNotFound),
-			})
-		}
-		if isConflict(err) {
+		switch {
+		case errors.Is(err, UserProfile.ErrNoFields):
+			return resp.BadRequest(ctx)
+		case errors.Is(err, UserProfile.ErrPunished):
+			// 命中生效中的权限封禁（如 PermSignature / PermNickname），返回 403 + 40302
+			return resp.Punished(ctx)
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			return resp.UserNotFound(ctx)
+		case isConflict(err):
 			return ctx.Status(fiber.StatusConflict).JSON(resp.CodeWithMsg{
 				Code: fiber.StatusConflict,
 				Msg:  i18n.Message(ctx, i18n.ErrUserInfoConflict),
 			})
+		default:
+			return resp.ServerError(ctx)
 		}
-		return resp.ServerError(ctx)
 	}
 
 	resp.MaskClosedAccount(ctx, user)
 	return ctx.Status(fiber.StatusOK).JSON(resp.CodeWithMsgUser{
-		Code: fiber.StatusOK,
-		Msg:  i18n.Message(ctx, i18n.OKUserInfoUpdated),
-		User: *user,
+		Code:  fiber.StatusOK,
+		Msg:   i18n.Message(ctx, i18n.OKUserInfoUpdated),
+		User:  *user,
+		Phone: MaskedSessionPhone(ctx),
 	})
 }
 
-func fullUpdates(req *updatereq.ProfileFull) (map[string]any, bool) {
-	username := strings.TrimSpace(req.Username)
-	nickname := strings.TrimSpace(req.Nickname)
-	avatar := strings.TrimSpace(req.Avatar)
-	bio := strings.TrimSpace(req.Bio)
-	if !validUsername(username) || !validNickname(nickname) || !validRegion(req.Region) || !validAvatar(avatar) || !validBio(bio) || !validGender(req.Gender) {
+// fullFields 校验并转换全量更新请求。PUT 语义要求四个字段都可落库，任一字段非法即整体拒绝。
+func fullFields(req *updatereq.ProfileFull) ([]UserProfile.Field, bool) {
+	username, ok := UserProfile.NormalizeUsername(req.Username)
+	if !ok {
+		return nil, false
+	}
+	nickname, ok := UserProfile.NormalizeNickname(req.Nickname)
+	if !ok {
+		return nil, false
+	}
+	bio, ok := UserProfile.NormalizeBio(req.Bio)
+	if !ok {
+		return nil, false
+	}
+	gender, ok := UserProfile.NormalizeGender(req.Gender)
+	if !ok {
 		return nil, false
 	}
 
-	return map[string]any{
-		"username": username,
-		"nickname": nickname,
-		"region":   req.Region,
-		"avatar":   avatar,
-		"bio":      bio,
-		"gender":   req.Gender,
+	return []UserProfile.Field{
+		{Column: "username", Value: username, Perm: UserProfile.PermUsername},
+		{Column: "nickname", Value: nickname, Perm: UserProfile.PermNickname},
+		{Column: "bio", Value: bio, Perm: UserProfile.PermBio},
+		{Column: "gender", Value: gender},
 	}, true
 }
 
-func patchUpdates(req *updatereq.ProfilePatch) (map[string]any, bool) {
-	updates := map[string]any{}
+// patchFields 校验并转换部分更新请求，未传字段（nil）不参与更新。
+// 返回的 ok 只表示「已传入的字段全部合法」，不表示「至少有一个字段」：
+// 头像需要额外的文件校验，是否为空由调用方在合并头像字段后统一判断。
+func patchFields(req *updatereq.ProfilePatch) ([]UserProfile.Field, bool) {
+	fields := make([]UserProfile.Field, 0, 5)
 
 	if req.Username != nil {
-		username := strings.TrimSpace(*req.Username)
-		if !validUsername(username) {
+		username, ok := UserProfile.NormalizeUsername(*req.Username)
+		if !ok {
 			return nil, false
 		}
-		updates["username"] = username
+		fields = append(fields, UserProfile.Field{Column: "username", Value: username, Perm: UserProfile.PermUsername})
 	}
 	if req.Nickname != nil {
-		nickname := strings.TrimSpace(*req.Nickname)
-		if !validNickname(nickname) {
+		nickname, ok := UserProfile.NormalizeNickname(*req.Nickname)
+		if !ok {
 			return nil, false
 		}
-		updates["nickname"] = nickname
-	}
-	if req.Region != nil {
-		if !validRegion(*req.Region) {
-			return nil, false
-		}
-		updates["region"] = *req.Region
-	}
-	if req.Avatar != nil {
-		avatar := strings.TrimSpace(*req.Avatar)
-		if !validAvatar(avatar) {
-			return nil, false
-		}
-		updates["avatar"] = avatar
+		fields = append(fields, UserProfile.Field{Column: "nickname", Value: nickname, Perm: UserProfile.PermNickname})
 	}
 	if req.Bio != nil {
-		bio := strings.TrimSpace(*req.Bio)
-		if !validBio(bio) {
+		bio, ok := UserProfile.NormalizeBio(*req.Bio)
+		if !ok {
 			return nil, false
 		}
-		updates["bio"] = bio
+		fields = append(fields, UserProfile.Field{Column: "bio", Value: bio, Perm: UserProfile.PermBio})
 	}
 	if req.Gender != nil {
-		if !validGender(*req.Gender) {
+		gender, ok := UserProfile.NormalizeGender(*req.Gender)
+		if !ok {
 			return nil, false
 		}
-		updates["gender"] = *req.Gender
+		fields = append(fields, UserProfile.Field{Column: "gender", Value: gender})
 	}
 
-	return updates, len(updates) > 0
+	return fields, true
 }
 
-func validUsername(value string) bool {
-	return value != "" && len(value) <= consts.MaxUsernameLen
-}
-
-func validNickname(value string) bool {
-	return value != "" && len(value) <= consts.MaxNicknameLen
-}
-
-func validRegion(value uint16) bool {
-	return value > 0
-}
-
-func validAvatar(value string) bool {
-	return len(value) <= consts.MaxAvatarLen
-}
-
-func validBio(value string) bool {
-	return len(value) <= consts.MaxBioLen
-}
-
-func validGender(value uint8) bool {
-	return value <= 3
-}
-
+// isConflict 判断数据库唯一键冲突（账号名、昵称各自唯一）。
+// 只做错误文本匹配，任何库内异常都会继续走通用 500 分支。
 func isConflict(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "Duplicate entry") || strings.Contains(msg, "UNIQUE constraint failed")

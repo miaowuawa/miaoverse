@@ -36,11 +36,16 @@ func ServerStart(app *fiber.App, config *conf.AppConfig) {
 	MetaSync.Start(syncCtx, servants, 10*time.Minute)
 	defer syncCancel()
 
+	// 启动通知事件总线接收（跨实例 SSE 推送：Redis pub/sub 把通知分发到各实例的在线连接）
+	servants.NotifyServant.StartEventBus(syncCtx)
+
 	port := config.Server.Port
 	if port == 0 {
 		port = 3000
 	}
-	err = app.Listen(fmt.Sprintf(":%d", port))
+	// Host 为空时保持旧行为监听所有网卡；配置 127.0.0.1 时仅监听本机回环地址，
+	// 供反向代理（nginx/OpenResty 等）经 127.0.0.1 访问。
+	err = app.Listen(fmt.Sprintf("%s:%d", config.Server.Host, port))
 	if err != nil {
 		return
 	}

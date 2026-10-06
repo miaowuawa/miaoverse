@@ -17,7 +17,7 @@ const (
 )
 
 const (
-	MaxCommentLen        = 1000 // 评论/回复内容最大长度
+	MaxCommentLen        = 1000 // 评论/回复正文最大长度（不含贴纸内嵌标记，见 Sticker.StripTokens）
 	MaxConversationDepth = 10   // 楼中楼对话最大收集层数（一般 2-3 层即可覆盖）
 	CommentChainMaxDepth = 20   // 楼中楼评论链上溯最大深度，防止脏数据导致死循环
 )

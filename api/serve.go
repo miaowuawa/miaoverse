@@ -6,6 +6,7 @@ import (
 	userfeed "miaoverse/api/routers/v1/feed"
 	usermoment "miaoverse/api/routers/v1/moment"
 	usercomment "miaoverse/api/routers/v1/moment/comment"
+	usernotify "miaoverse/api/routers/v1/notify"
 	usersticker "miaoverse/api/routers/v1/sticker"
 	"time"
 
@@ -271,6 +272,20 @@ func Initial(app *fiber.App, servants *server.Servants) {
 	userGroup.Get("/users/:uid/avatar", func(c fiber.Ctx) error {
 		return profile.GetAvatarHandler(c, servants)
 	})
+	// 查询当前账号是否已设置密码（仅本人，uid 取自登录会话）
+	userGroup.Get("/password", func(c fiber.Ctx) error {
+		return profile.PasswordStatusHandler(c, servants)
+	})
+	// 申请「修改密码」短信验证码：手机号取自登录会话，客户端无法指定，
+	// 因此该接口不能被用来给任意号码发短信；同一手机号 60 秒冷却（429）。
+	userGroup.Post("/password/sms", func(c fiber.Ctx) error {
+		return profile.SendPasswordSMSHandler(c, servants)
+	})
+	// 通过手机验证码设置/修改密码：手机号与区号取自登录会话（手机号不支持更改），
+	// 验证码必须为 CHANGE_PASSWORD 场景（登录验证码不可复用），密码 bcrypt 哈希后落库。
+	userGroup.Put("/password", func(c fiber.Ctx) error {
+		return profile.UpdatePasswordHandler(c, servants)
+	})
 	userGroup.Post("/files", func(c fiber.Ctx) error {
 		return userfile.UploadHandler(c, servants)
 	})
@@ -319,4 +334,38 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		func(c fiber.Ctx) error {
 			return userrelation.FollowersHandler(c, servants)
 		})
+
+	// ===== 通知组 /notify（需登录）=====
+	// 通知分类（category 参数/响应字段）：account 账号、like 点赞、follow 关注、mention 提及、reply 回复。
+	// stream 为 SSE 实时推送流：被点赞/被回复/被关注、修改密码、登录产生的通知实时下发，
+	// 并周期性下发心跳（event: ping）保活；在线状态即基于该心跳判定（presence 接口查询）。
+	// 登录态经 session cookie 校验。
+	notifyGroup := v1.Group("/notify")
+	notifyGroup.Use(middleware.RequireUser(servants, UserCheck.AccountActive()))
+	// SSE 实时推送流（静态路由先于 /:id 注册，避免被参数路由抢先匹配）
+	notifyGroup.Get("/stream", func(c fiber.Ctx) error {
+		return usernotify.StreamHandler(c, servants)
+	})
+	// 通知列表：?category=&offset=&limit=（category 缺省为全部）
+	notifyGroup.Get("/", func(c fiber.Ctx) error {
+		return usernotify.ListHandler(c, servants)
+	})
+	// 各分类未读数（导航小红点）
+	notifyGroup.Get("/unread-count", func(c fiber.Ctx) error {
+		return usernotify.UnreadCountHandler(c, servants)
+	})
+	// 用户在线状态批量查询（基于 SSE 连接心跳）：?uids=1,2,3
+	notifyGroup.Get("/presence", func(c fiber.Ctx) error {
+		return usernotify.PresenceHandler(c, servants)
+	})
+	// 标记单条已读 / 全部已读 / 删除单条（均返回最新未读数）
+	notifyGroup.Patch("/:id/read", func(c fiber.Ctx) error {
+		return usernotify.MarkReadHandler(c, servants)
+	})
+	notifyGroup.Patch("/read-all", func(c fiber.Ctx) error {
+		return usernotify.MarkAllReadHandler(c, servants)
+	})
+	notifyGroup.Delete("/:id", func(c fiber.Ctx) error {
+		return usernotify.DeleteHandler(c, servants)
+	})
 }

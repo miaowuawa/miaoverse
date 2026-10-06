@@ -15,7 +15,7 @@ import (
 
 // 贴纸在评论文本中的内嵌标记：[sticker:<uuid>]。
 // 标记由前端贴纸选择器在光标处插入，作为评论文字的一部分穿插展示；
-// 一条评论最多使用一个贴纸（consts.MaxCommentStickerTokens）。
+// 一条评论最多使用 consts.MaxCommentStickerTokens 张贴纸（可多张，随文字任意位置穿插）。
 const (
 	tokenPrefix = "[sticker:"
 	tokenSuffix = "]"
@@ -26,7 +26,7 @@ var tokenRegexp = regexp.MustCompile(`\[sticker:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[
 
 // 贴纸使用校验的业务错误（由 handler 统一映射为 resp 错误响应）。
 var (
-	ErrTokenExceeded = errors.New("sticker tokens exceeded") // 一条评论使用了多个贴纸
+	ErrTokenExceeded = errors.New("sticker tokens exceeded") // 一条评论使用贴纸数超过上限
 	ErrNotFound      = errors.New("sticker not found")       // 贴纸不存在或已删除
 	ErrPackBanned    = errors.New("sticker pack banned")     // 贴纸所在贴纸包被封禁
 	ErrNotUsable     = errors.New("sticker not usable")      // 非本人上传/未收藏，无权使用
@@ -47,46 +47,64 @@ func ExtractTokens(content string) []string {
 	return result
 }
 
-// CheckCommentSticker 校验评论内容中的贴纸使用并返回贴纸 UUID（无贴纸时返回空串）：
-//   - 内嵌标记数不得超过 consts.MaxCommentStickerTokens（一条评论最多一个贴纸）；
+// StripTokens 移除文本中的全部贴纸内嵌标记，返回纯文字部分。
+// 评论正文长度限制（consts.MaxCommentLen）按去除标记后的文字计算，贴纸标记不占正文字数。
+func StripTokens(content string) string {
+	return tokenRegexp.ReplaceAllString(content, "")
+}
+
+// CheckCommentStickers 校验评论内容中的贴纸使用并按出现顺序返回贴纸 UUID 列表（无贴纸时返回 nil）：
+//   - 内嵌标记数不得超过 consts.MaxCommentStickerTokens（一条评论最多 25 张贴纸）；
 //   - 贴纸必须存在且未删除；
 //   - 贴纸必须是使用者本人上传、已加入收藏夹、或属于已收藏贴纸包（登录且绑定手机号用户的可用集合）；
 //   - 所在贴纸包被封禁的贴纸不可用于新评论。
-func CheckCommentSticker(servants *server.Servants, uid uint32, content string) (string, error) {
+func CheckCommentStickers(servants *server.Servants, uid uint32, content string) ([]string, error) {
 	tokens := ExtractTokens(content)
 	if len(tokens) == 0 {
-		return "", nil
+		return nil, nil
 	}
 	if len(tokens) > consts.MaxCommentStickerTokens {
-		return "", ErrTokenExceeded
+		return nil, ErrTokenExceeded
 	}
 
-	stickerUUID := tokens[0]
-	s, err := servants.StickerServant.QueryStickerByUUID(stickerUUID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", ErrNotFound
+	result := make([]string, 0, len(tokens))
+	checked := make(map[string]bool, len(tokens))
+	for _, stickerUUID := range tokens {
+		// 同一张贴纸重复使用只校验一次
+		if checked[stickerUUID] {
+			result = append(result, stickerUUID)
+			continue
 		}
-		return "", err
+		checked[stickerUUID] = true
+
+		s, err := servants.StickerServant.QueryStickerByUUID(stickerUUID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrNotFound
+			}
+			return nil, err
+		}
+
+		banned, err := IsPackBanned(servants, s)
+		if err != nil {
+			return nil, err
+		}
+		if banned {
+			return nil, ErrPackBanned
+		}
+
+		usable, err := IsUsable(servants, uid, s)
+		if err != nil {
+			return nil, err
+		}
+		if !usable {
+			return nil, ErrNotUsable
+		}
+
+		result = append(result, stickerUUID)
 	}
 
-	banned, err := IsPackBanned(servants, s)
-	if err != nil {
-		return "", err
-	}
-	if banned {
-		return "", ErrPackBanned
-	}
-
-	usable, err := IsUsable(servants, uid, s)
-	if err != nil {
-		return "", err
-	}
-	if !usable {
-		return "", ErrNotUsable
-	}
-
-	return stickerUUID, nil
+	return result, nil
 }
 
 // IsUsable 判断用户是否可以使用该贴纸：本人上传、已加入个人收藏夹、或属于已收藏贴纸包内的贴纸。
@@ -228,6 +246,47 @@ func ResolveCommentStickers(servants *server.Servants, stickerUUIDs []string) (m
 			Name:     s.Name,
 			Hidden:   hidden,
 		}
+	}
+	return result, nil
+}
+
+// ResolveContentStickers 解析单条评论/回复正文内嵌贴纸的展示信息列表（按标记出现顺序）。
+func ResolveContentStickers(servants *server.Servants, content string) ([]resp.CommentSticker, error) {
+	items, err := ResolveContentsStickers(servants, []string{content})
+	if err != nil {
+		return nil, err
+	}
+	return items[0], nil
+}
+
+// ResolveContentsStickers 批量解析多条评论/回复正文内嵌贴纸的展示信息：
+// 与传入 contents 一一对应（无贴纸的位置为 nil），每个位置内按标记出现顺序返回（重复标记按出现次数返回）。
+// 贴纸展示位置由前端按 content 中的标记还原，这里只负责图片/封禁展示信息。
+func ResolveContentsStickers(servants *server.Servants, contents []string) ([][]resp.CommentSticker, error) {
+	result := make([][]resp.CommentSticker, len(contents))
+	tokensPerContent := make([][]string, len(contents))
+	all := make([]string, 0, len(contents))
+	for i, content := range contents {
+		tokensPerContent[i] = ExtractTokens(content)
+		all = append(all, tokensPerContent[i]...)
+	}
+	if len(all) == 0 {
+		return result, nil
+	}
+
+	resolved, err := ResolveCommentStickers(servants, all)
+	if err != nil {
+		return nil, err
+	}
+	for i, tokens := range tokensPerContent {
+		if len(tokens) == 0 {
+			continue
+		}
+		items := make([]resp.CommentSticker, 0, len(tokens))
+		for _, u := range tokens {
+			items = append(items, resolved[u])
+		}
+		result[i] = items
 	}
 	return result, nil
 }

@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS `comment` (
     `target_id`   BIGINT UNSIGNED NOT NULL COMMENT 'target id: moment/comment id',
     `target_type` TINYINT UNSIGNED NOT NULL COMMENT '1 moment, 2 comment (reply)',
     `content`     TEXT            NOT NULL COMMENT 'comment content (may contain inline sticker token [sticker:<uuid>])',
-    `sticker_uuid` CHAR(36)       NOT NULL DEFAULT '' COMMENT 'inline sticker uuid, empty if none (max 1 per comment)',
+    `sticker_uuid` CHAR(36)       NOT NULL DEFAULT '' COMMENT 'first inline sticker uuid (compat), empty if none; up to 25 inline sticker tokens in content',
     `status`      TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 normal, 1 deleted, 2 draft, 3 restricted, 4 blocked',
     `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -185,6 +185,9 @@ CREATE TABLE IF NOT EXISTS `notify` (
     `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'notify id',
     `user_id`    INT UNSIGNED    NOT NULL COMMENT 'receiver user id',
     `type`       TINYINT UNSIGNED NOT NULL COMMENT '0 account security, 1 transaction, 2 like, 3 follow, 4 mention, 5 reply/comment',
+    `actor_id`   INT UNSIGNED    NOT NULL DEFAULT 0 COMMENT 'trigger user id, 0 for system/account-security notify',
+    `target_type` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 user, 1 moment, 2 comment (consts.InteractTarget*)',
+    `target_id`  BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'related target id (user id / moment id / comment id)',
     `content`    VARCHAR(1000)   NOT NULL DEFAULT '' COMMENT 'notify content',
     `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `read_at`    DATETIME        NULL DEFAULT NULL,
@@ -192,6 +195,7 @@ CREATE TABLE IF NOT EXISTS `notify` (
     `status`     TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 unread, 1 read, 2 deleted',
     PRIMARY KEY (`id`),
     KEY `idx_notify_user_id_status` (`user_id`, `status`),
+    KEY `idx_notify_user_id_type` (`user_id`, `type`),
     KEY `idx_notify_created_at` (`created_at`),
     CONSTRAINT `fk_notify_user_id`
         FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)

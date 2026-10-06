@@ -39,11 +39,11 @@ func BySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	if !exists {
-		return loginSingleAccount(ctx, req.Phone, req.Region, users[0].ID, fiber.StatusCreated, i18n.OKRegisterAndLogin)
+		return loginSingleAccount(ctx, servants, req.Phone, req.Region, users[0].ID, fiber.StatusCreated, i18n.OKRegisterAndLogin)
 	}
 
 	if len(users) == 1 {
-		return loginSingleAccount(ctx, req.Phone, req.Region, users[0].ID, fiber.StatusOK, i18n.OKLogin)
+		return loginSingleAccount(ctx, servants, req.Phone, req.Region, users[0].ID, fiber.StatusOK, i18n.OKLogin)
 	}
 
 	if err := UserSession.LoginBySMSMultipleChoices(ctx, req.Phone, req.Region); err != nil {
@@ -87,7 +87,7 @@ func RegisterBySMSHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	return loginSingleAccount(ctx, req.Phone, req.Region, newUser.ID, fiber.StatusCreated, i18n.OKNewAccountAndLogin)
+	return loginSingleAccount(ctx, servants, req.Phone, req.Region, newUser.ID, fiber.StatusCreated, i18n.OKNewAccountAndLogin)
 }
 
 func ChooseUserHandler(ctx fiber.Ctx, servants *server.Servants) error {
@@ -122,7 +122,7 @@ func ChooseUserHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		})
 	}
 
-	return loginSingleAccount(ctx, phone, region, req.UID, fiber.StatusOK, i18n.OKLogin)
+	return loginSingleAccount(ctx, servants, phone, region, req.UID, fiber.StatusOK, i18n.OKLogin)
 }
 
 // AccountListHandler 返回当前会话登录手机号绑定的全部可登录账号。
@@ -190,7 +190,7 @@ func SwitchAccountHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.AccountBanned(ctx)
 	}
 
-	return loginSingleAccount(ctx, phone, region, req.UID, fiber.StatusOK, i18n.OKLogin)
+	return loginSingleAccount(ctx, servants, phone, region, req.UID, fiber.StatusOK, i18n.OKLogin)
 }
 
 func bindAndValidateSMS(ctx fiber.Ctx, servants *server.Servants) (*loginreq.SMS, bool) {
@@ -212,14 +212,24 @@ func verifySMSCode(req *loginreq.SMS, servants *server.Servants) (bool, error) {
 	if !valid {
 		return false, nil
 	}
-	hash := util.MD5Hash.HashStr(strconv.FormatUint(uint64(req.Region), 10) + req.Phone)
-	return servants.CodeManager.VerifyCodeByRegionPhoneMD5(hash, req.UUID, strconv.Itoa(req.Code))
+	// 登录验证码按 LOGIN 场景校验：为修改密码申请的验证码不能用于登录，反之亦然。
+	return servants.CodeManager.VerifySceneCode(
+		consts.ActionLogin,
+		strconv.FormatUint(uint64(req.Region), 10),
+		req.Phone,
+		req.UUID,
+		strconv.Itoa(req.Code),
+	)
 }
 
-func loginSingleAccount(ctx fiber.Ctx, phone string, region uint16, uid uint32, status int, msgKey i18n.MessageKey) error {
+func loginSingleAccount(ctx fiber.Ctx, servants *server.Servants, phone string, region uint16, uid uint32, status int, msgKey i18n.MessageKey) error {
 	if err := UserSession.LoginBySMSSingleAccount(ctx, phone, region, uid); err != nil {
 		return resp.ServerError(ctx)
 	}
+
+	// 登录成功后向账号本人发送「账号安全」通知（旁路业务，失败不影响登录结果）
+	servants.NotifyServant.NotifyAccountSecurity(uid, i18n.Message(ctx, i18n.NotifyLogin))
+
 	return ctx.Status(status).JSON(resp.CodeWithMsgUserID{
 		Code: status,
 		Msg:  i18n.Message(ctx, msgKey),

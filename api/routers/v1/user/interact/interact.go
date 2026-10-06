@@ -6,6 +6,7 @@ import (
 	"miaoverse/middleware"
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
+	"miaoverse/service/i18n"
 )
 
 // FollowHandler 关注用户。拉黑/屏蔽/不想看校验由 RequireNoBlockUser 中间件完成。
@@ -22,6 +23,11 @@ func FollowHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	if err := servants.InteractsServant.FollowUser(uid, targetID); err != nil {
 		return resp.ServerError(ctx)
+	}
+
+	// 被关注通知（旁路业务，失败不影响关注结果）
+	if actor, ok := middleware.CurrentUser(ctx); ok {
+		servants.NotifyServant.NotifyFollow(actor, targetID, i18n.LanguageFromCtx(ctx))
 	}
 
 	return resp.InteractOK(ctx, uint64(targetID), consts.ActionFollow)
@@ -61,6 +67,11 @@ func LikeHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	if err := servants.InteractsServant.LikeMomentAndMeta(uid, moment.ID, moment.UserID); err != nil {
 		return resp.ServerError(ctx)
+	}
+
+	// 被点赞通知（旁路业务，失败不影响点赞结果；自己给自己点赞由服务层跳过）
+	if actor, ok := middleware.CurrentUser(ctx); ok {
+		servants.NotifyServant.NotifyLikeMoment(actor, moment.ID, moment.UserID, moment.Content, i18n.LanguageFromCtx(ctx))
 	}
 
 	return resp.InteractOK(ctx, moment.ID, consts.ActionLike)

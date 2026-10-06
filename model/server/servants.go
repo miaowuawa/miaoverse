@@ -8,6 +8,7 @@ import (
 	"miaoverse/dao/interacts"
 	"miaoverse/dao/sticker"
 	"miaoverse/dao/user"
+	"miaoverse/service/Notify"
 	"miaoverse/service/UserBlock"
 	storagemongo "miaoverse/service/mongo"
 	storages3 "miaoverse/service/s3"
@@ -26,6 +27,7 @@ type Servants struct {
 	ArticleServant      *article.ArticleDAO
 	StickerServant      *sticker.StickerDAO
 	BlockServant        *UserBlock.Servant
+	NotifyServant       *Notify.Servant
 	S3Servant           *storages3.Servant
 	MongoServant        *storagemongo.Servant
 	MaxUploadFileSize   int64

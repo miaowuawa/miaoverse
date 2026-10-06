@@ -321,7 +321,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 | --- | --- | --- | --- | --- |
 | `moment_id` | number | 是 | 大于 0 | 目标动态 ID |
-| `content` | string | 是 | 非空，最长 1000 字符 | 评论内容。可携带一个贴纸内嵌标记 `[sticker:<uuid>]` 随文字穿插展示（一条评论最多一个贴纸，规则见 `API-sticker.md`） |
+| `content` | string | 是 | 非空，正文最长 1000 字符（不含贴纸标记） | 评论内容。可携带最多 25 个贴纸内嵌标记 `[sticker:<uuid>]` 随文字任意位置穿插展示（一条评论最多 25 张贴纸，规则见 `API-sticker.md`） |
 
 #### 成功响应
 
@@ -337,16 +337,20 @@ curl -i http://localhost:3000/api/v1/moments/1 \
     "moment_id": 1,
     "content": "写得好 [sticker:123e4567-e89b-12d3-a456-426614174000]",
     "status": 0,
-    "created_at": "2026-06-07 12:00:00",
+    "created_at": "2026-06-07T12:00:00+08:00",
     "author": { "id": 10001, "nickname": "要乐奈", "username": "rana_mygo" },
     "likes": 0,
     "is_liked": false,
-    "sticker": {
-      "uuid": "123e4567-e89b-12d3-a456-426614174000",
-      "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
-      "name": "好耶",
-      "hidden": false
-    }
+    "reply_count": 0,
+    "reply_depth": 0,
+    "stickers": [
+      {
+        "uuid": "123e4567-e89b-12d3-a456-426614174000",
+        "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
+        "name": "好耶",
+        "hidden": false
+      }
+    ]
   }
 }
 ```
@@ -356,10 +360,13 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `content` | string | 评论原文，贴纸内嵌标记 `[sticker:<uuid>]` 保留在文本中，前端按标记位置穿插展示贴纸 |
+| `created_at` | string | RFC3339 时间（如 `2026-06-07T12:00:00+08:00`） |
 | `author` | object | 评论作者用户信息（已注销账号的展示字段统一打码） |
 | `likes` | number | 点赞数 |
 | `is_liked` | boolean | 当前登录用户是否已点赞 |
-| `sticker` | object | 评论内嵌贴纸展示信息，无贴纸时不返回。`hidden=true` 表示贴纸无法显示（所在贴纸包被封禁或贴纸已删除），前端在评论下灰字提示「部分贴纸未显示」。贴纸图片用 `file_uuid` 经临时链接接口换取 |
+| `reply_count` | number | 该评论楼中楼下的回复总数（含全部子孙回复） |
+| `reply_depth` | number | 该评论楼中楼相对首条评论的最大嵌套层数（首条评论为 `0` 层、直接回复为 `1` 层）。前端据此判断链式对话是否超过预览层数（3 层），超过时在首条评论处提供「查看完整对话」入口 |
+| `stickers` | array | 评论内嵌贴纸展示信息列表，按 `content` 中标记出现顺序返回（无贴纸时不返回）。`hidden=true` 表示贴纸无法显示（所在贴纸包被封禁或贴纸已删除），前端在评论下灰字提示「部分贴纸未显示」。贴纸图片用 `file_uuid` 经临时链接接口换取 |
 
 #### 评论权限规则
 
@@ -372,7 +379,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 请求体不是 JSON、`moment_id` 为 0、`content` 为空或超长；贴纸标记超过一个（`贴纸使用错误，一条评论最多使用一个贴纸`） |
+| `400` | 请求体不是 JSON、`moment_id` 为 0、`content` 为空或正文超长；贴纸标记超过 25 个（`贴纸使用错误，一条评论最多使用 25 张贴纸`） |
 | `401` | 未登录或 session 中没有 `UID` |
 | `403` | 评论权限封禁（`code` 为 `40302`）；拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`）；使用贴纸但未绑定手机号；贴纸不在可用集合（`只能使用自己上传或已收藏的贴纸哦～`）；贴纸所在贴纸包被封禁 |
 | `404` | 动态不存在或已删除；使用的贴纸不存在或已删除 |
@@ -409,22 +416,26 @@ curl -i http://localhost:3000/api/v1/moments/1 \
       "moment_id": 1,
       "content": "写得好 [sticker:123e4567-e89b-12d3-a456-426614174000]",
       "status": 0,
-      "created_at": "2026-06-07 12:00:00",
+      "created_at": "2026-06-07T12:00:00+08:00",
       "author": { "id": 10001, "nickname": "要乐奈", "username": "rana_mygo" },
       "likes": 12,
       "is_liked": false,
-      "sticker": {
-        "uuid": "123e4567-e89b-12d3-a456-426614174000",
-        "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
-        "name": "好耶",
-        "hidden": false
-      }
+      "reply_count": 3,
+      "reply_depth": 2,
+      "stickers": [
+        {
+          "uuid": "123e4567-e89b-12d3-a456-426614174000",
+          "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
+          "name": "好耶",
+          "hidden": false
+        }
+      ]
     }
   ]
 }
 ```
 
-字段说明：与评论接口的 `comment` 对象一致；`sticker.hidden=true` 时前端隐藏贴纸并在该评论下灰字提示「部分贴纸未显示」。
+字段说明：与评论接口的 `comment` 对象一致；`reply_count` 为该评论楼中楼下的回复总数（展开楼中楼/查看完整对话用对话接口获取）；`reply_depth` 为楼中楼最大嵌套层数（首条评论为 `0` 层），超过 3 层时前端在首条评论处展示「查看完整对话」入口；`stickers[].hidden=true` 时前端隐藏对应贴纸并在该评论下灰字提示「部分贴纸未显示」。
 
 #### 可能的错误
 
@@ -450,7 +461,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 - 与动态作者或被回复评论作者存在任意一方拉黑关系时不可回复，返回 `40301`。
 - 评论权限按所属动态的 `comment_permission` 校验（与评论动态一致）。
 - 楼中楼回复不计入 `moment_interact_count.comment_count`（该计数只统计一级评论），完整回复列表通过对话接口获取。
-- 支持回复自己的评论、回复自己动态下的评论。
+- 支持回复自己的评论、回复自己动态下的评论，也支持回复楼中楼内的任意回复（回复他人的回复），新回复统一归入以楼中楼首条评论为根的同一对话链。
 
 #### 请求头
 
@@ -471,7 +482,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 | --- | --- | --- | --- | --- |
-| `content` | string | 是 | 非空，最长 1000 字符 | 回复内容。可携带一个贴纸内嵌标记 `[sticker:<uuid>]`（规则与评论一致，见 `API-sticker.md`） |
+| `content` | string | 是 | 非空，正文最长 1000 字符（不含贴纸标记） | 回复内容。可携带最多 25 个贴纸内嵌标记 `[sticker:<uuid>]`（规则与评论一致，见 `API-sticker.md`） |
 
 #### 成功响应
 
@@ -489,13 +500,18 @@ curl -i http://localhost:3000/api/v1/moments/1 \
     "reply_to_user_id": 10001,
     "content": "同意",
     "status": 0,
-    "created_at": "2026-06-07 12:01:00",
-    "sticker": {
-      "uuid": "123e4567-e89b-12d3-a456-426614174000",
-      "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
-      "name": "好耶",
-      "hidden": false
-    }
+    "created_at": "2026-06-07T12:01:00+08:00",
+    "author": { "id": 10002, "nickname": "要乐奈", "username": "rana_mygo" },
+    "likes": 0,
+    "is_liked": false,
+    "stickers": [
+      {
+        "uuid": "123e4567-e89b-12d3-a456-426614174000",
+        "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
+        "name": "好耶",
+        "hidden": false
+      }
+    ]
   }
 }
 ```
@@ -504,16 +520,20 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `reply_to_id` | number | 被回复的评论 id |
+| `reply_to_id` | number | 被回复的评论 id（楼中楼首条评论或楼中楼内任意回复） |
 | `reply_to_user_id` | number | 被回复的评论作者 id |
 | `moment_id` | number | 所属动态 id |
-| `sticker` | object | 回复内嵌贴纸展示信息（语义与评论一致），无贴纸时不返回 |
+| `created_at` | string | RFC3339 时间（如 `2026-06-07T12:01:00+08:00`） |
+| `author` | object | 回复作者用户信息（已注销账号的展示字段统一打码） |
+| `likes` | number | 点赞数 |
+| `is_liked` | boolean | 当前登录用户是否已点赞 |
+| `stickers` | array | 回复内嵌贴纸展示信息列表（语义与评论一致），无贴纸时不返回 |
 
 #### 可能的错误
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 请求体不是 JSON、`content` 为空或超长、`:id` 非法或评论不存在/已删除；贴纸标记超过一个 |
+| `400` | 请求体不是 JSON、`content` 为空或正文超长、`:id` 非法或评论不存在/已删除；贴纸标记超过 25 个 |
 | `401` | 未登录或 session 中没有 `UID` |
 | `403` | 评论权限封禁（`code` 为 `40302`）；与动态作者或被回复评论作者存在拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`）；使用贴纸但未绑定手机号/贴纸不可用/贴纸包被封禁 |
 | `404` | 使用的贴纸不存在或已删除 |
@@ -561,7 +581,12 @@ curl -i "http://localhost:3000/api/v1/comment/moments/1/conversation?offset=0&li
       "moment_id": 1,
       "content": "写得好",
       "status": 0,
-      "created_at": "2026-06-07 12:00:00"
+      "created_at": "2026-06-07T12:00:00+08:00",
+      "author": { "id": 10001, "nickname": "要乐奈", "username": "rana_mygo" },
+      "likes": 12,
+      "is_liked": false,
+      "reply_count": 2,
+      "reply_depth": 1
     },
     "count": 2,
     "replies": [
@@ -573,12 +598,23 @@ curl -i "http://localhost:3000/api/v1/comment/moments/1/conversation?offset=0&li
         "reply_to_user_id": 10001,
         "content": "同意",
         "status": 0,
-        "created_at": "2026-06-07 12:01:00"
+        "created_at": "2026-06-07T12:01:00+08:00",
+        "author": { "id": 10002, "nickname": "要乐奈", "username": "rana_mygo" },
+        "likes": 1,
+        "is_liked": false
       }
     ]
   }
 }
 ```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `conversation.root` | object | 楼中楼首条评论（对象结构与评论接口的 `comment` 一致，含 `reply_count`、`reply_depth`） |
+| `conversation.count` | number | 该楼全部回复总数（含全部子孙回复） |
+| `conversation.replies` | array | 全部子孙回复的扁平列表，按 id 升序（时间正序）。`reply_to_id` 指向同一链上的上一环（首条评论或某条回复），前端据此渲染「回复 @某人」与楼中楼层级（预览态最多展示 3 层，更深层由「查看完整对话」加载展示） |
 
 #### 可能的错误
 

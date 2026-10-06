@@ -114,11 +114,14 @@ func (s *Servant) IsBlockedEither(ctx context.Context, a uint32, b uint32) (bool
 
 // IsFilteredBatch 批量判断 viewer 与每个 target 之间是否存在"拉黑/屏蔽/不想看"关系。
 // 返回 targetID → 是否被过滤 的 map；未命中任何关系的 target 不在 map 中。
-// 使用 Redis pipeline 一次往返完成全部查询，避免逐条 RTT。
+// 关系存储为 RoaringBitmap 序列化字节串（见 load/save），因此这里用 pipeline 批量 GET
+// 反序列化后做成员判断（一次网络往返），不能用 GETBIT 对序列化字节做位偏移查询。
 // 过滤口径：viewer 拉黑/屏蔽/不想看 target，或 target 拉黑 viewer（双向拉黑）。
+// viewer=0 表示未登录游客：游客没有任何关系记录，直接返回空结果，不视为错误
+// （timeline 等免登录 feed 会以 uid=0 调用本方法）。
 func (s *Servant) IsFilteredBatch(ctx context.Context, viewer uint32, targets []uint32) (map[uint32]bool, error) {
 	result := map[uint32]bool{}
-	if len(targets) == 0 {
+	if viewer == 0 || len(targets) == 0 {
 		return result, nil
 	}
 
@@ -136,49 +139,68 @@ func (s *Servant) IsFilteredBatch(ctx context.Context, viewer uint32, targets []
 		return result, nil
 	}
 
-	// 每个 target 需要 4 次 Contains：viewer 的 3 种关系 + target 拉黑 viewer
-	keys := make([]string, 0, len(unique)*4)
-	keyOf := make(map[string]uint32, len(unique)*4)
-	for _, t := range unique {
-		for _, bt := range []BlockType{BlockTypeBlock, BlockTypeMute, BlockTypeUnwatch} {
-			key, err := s.BlockKey(viewer, bt)
-			if err != nil {
-				return nil, err
-			}
-			keys = append(keys, key)
-			keyOf[key] = t
+	// viewer 侧 3 种关系各一个 Bitmap；target 侧只有拉黑 Bitmap
+	viewerKeys := make([]string, 0, 3)
+	for _, bt := range []BlockType{BlockTypeBlock, BlockTypeMute, BlockTypeUnwatch} {
+		key, err := s.BlockKey(viewer, bt)
+		if err != nil {
+			return nil, err
 		}
+		viewerKeys = append(viewerKeys, key)
+	}
+	targetKeys := make(map[uint32]string, len(unique))
+	keys := make([]string, 0, len(viewerKeys)+len(unique))
+	keys = append(keys, viewerKeys...)
+	for _, t := range unique {
 		key, err := s.BlockKey(t, BlockTypeBlock)
 		if err != nil {
 			return nil, err
 		}
+		targetKeys[t] = key
 		keys = append(keys, key)
-		keyOf[key] = t
 	}
 
+	// pipeline 一次往返读取全部 Bitmap 原始字节
 	pipe := s.redis.WithContext(ctx).Pipeline()
-	cmds := make([]*redis.IntCmd, 0, len(keys))
+	cmds := make([]*redis.StringCmd, 0, len(keys))
 	for _, key := range keys {
-		cmds = append(cmds, pipe.GetBit(ctx, key, int64(viewer)))
+		cmds = append(cmds, pipe.Get(ctx, key))
 	}
-	if _, err := pipe.Exec(ctx); err != nil {
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("batch block filter: %w", err)
 	}
 
-	// 同一 target 的 4 个 bit 中任意一个为 1 即被过滤
-	// GETBIT 对不存在的 key 返回 0（无关系），不会报错
-	filtered := make(map[uint32]bool, len(unique))
+	// key 不存在（无关系）时 GET 返回 redis.Nil，按空 Bitmap 处理
+	bitmaps := make(map[string]*roaring.Bitmap, len(keys))
 	for i, cmd := range cmds {
-		bit, err := cmd.Result()
+		raw, err := cmd.Bytes()
 		if err != nil {
+			if errors.Is(err, redis.Nil) {
+				continue
+			}
 			return nil, fmt.Errorf("batch block filter: %w", err)
 		}
-		if bit == 1 {
-			filtered[keyOf[keys[i]]] = true
+		bitmap := roaring.New()
+		if _, err := bitmap.FromBuffer(raw); err != nil {
+			return nil, fmt.Errorf("deserialize block bitmap %q: %w", keys[i], err)
 		}
+		bitmaps[keys[i]] = bitmap
 	}
-	for t := range filtered {
-		result[t] = true
+
+	// viewer 侧 Bitmap 存放被 viewer 拉黑/屏蔽/不想看的用户；target 侧拉黑 Bitmap 存放被 target 拉黑的用户
+	for _, t := range unique {
+		for _, key := range viewerKeys {
+			if b := bitmaps[key]; b != nil && b.Contains(t) {
+				result[t] = true
+				break
+			}
+		}
+		if result[t] {
+			continue
+		}
+		if b := bitmaps[targetKeys[t]]; b != nil && b.Contains(viewer) {
+			result[t] = true
+		}
 	}
 	return result, nil
 }

@@ -17,3 +17,9 @@ func loginUniversal(c fiber.Ctx) error {
 	}
 	return sess.Regenerate()
 }
+
+// RefreshSessionID 在敏感操作（如修改密码）成功后重新生成 session ID，保留会话内容不变。
+// 与登录一样用于防御会话固定：即使攻击者事先拿到了 session ID，操作后也会立即失效。
+func RefreshSessionID(c fiber.Ctx) error {
+	return loginUniversal(c)
+}

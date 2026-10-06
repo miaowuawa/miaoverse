@@ -1,4 +1,5 @@
 server:
+  host:
   port:
   log_level:
 

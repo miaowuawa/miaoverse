@@ -23,6 +23,7 @@ const (
 	ErrServerInternal        MessageKey = "error.server_internal"
 	ErrServerContactAdmin    MessageKey = "error.server_contact_admin"
 	ErrSMSProvider           MessageKey = "error.sms_provider"
+	ErrSMSTooFrequent        MessageKey = "error.sms_too_frequent"
 	ErrSMSCodeInvalid        MessageKey = "error.sms_code_invalid"
 	ErrPhoneHasNoAccount     MessageKey = "error.phone_has_no_account"
 	ErrNoPendingLoginAccount MessageKey = "error.no_pending_login_account"
@@ -36,6 +37,7 @@ const (
 	ErrAccountUnavailable    MessageKey = "error.account_unavailable"
 	ErrPhoneNotBound         MessageKey = "error.phone_not_bound"
 	ErrPasswordNotSet        MessageKey = "error.password_not_set"
+	ErrPasswordTooWeak       MessageKey = "error.password_too_weak"
 	ErrCertificationRequired MessageKey = "error.certification_required"
 	ErrInvalidReferrer       MessageKey = "error.invalid_referrer"
 	ErrFileTooLarge          MessageKey = "error.file_too_large"
@@ -71,6 +73,8 @@ const (
 	OKAccountList           MessageKey = "ok.account_list"
 	OKLogout                MessageKey = "ok.logout"
 	OKUserInfoUpdated       MessageKey = "ok.user_info_updated"
+	OKPasswordUpdated       MessageKey = "ok.password_updated"
+	OKPasswordStatus        MessageKey = "ok.password_status"
 	OKAvatarUpdated         MessageKey = "ok.avatar_updated"
 	OKAvatarFetched         MessageKey = "ok.avatar_fetched"
 	OKFileUploaded          MessageKey = "ok.file_uploaded"
@@ -98,7 +102,17 @@ const (
 	OKStickerUpdated        MessageKey = "ok.sticker_updated"
 	OKStickerPackCreated    MessageKey = "ok.sticker_pack_created"
 	OKStickerPackList       MessageKey = "ok.sticker_pack_list"
+	OKNotifyList            MessageKey = "ok.notify_list"
+	OKNotifyFetched         MessageKey = "ok.notify_fetched"
+	OKNotifyRead            MessageKey = "ok.notify_read"
+	OKNotifyDeleted         MessageKey = "ok.notify_deleted"
+	OKPresenceFetched       MessageKey = "ok.presence_fetched"
 	SMSActionLoginRegister  MessageKey = "sms.action.login_register"
+	SMSActionChangePassword MessageKey = "sms.action.change_password"
+
+	// 通知 content 文案（账号安全类通知写入 notify.content，异步场景按默认语言渲染）。
+	NotifyLogin           MessageKey = "notify.content.login"
+	NotifyPasswordChanged MessageKey = "notify.content.password_changed"
 )
 
 type Data map[string]any
@@ -416,6 +430,7 @@ func resetCatalog() {
 			ErrServerInternal:        {Other: "服务器内部错误，请稍后重试"},
 			ErrServerContactAdmin:    {Other: "服务器异常，请联系管理员"},
 			ErrSMSProvider:           {Other: "短信服务暂时不可用，请稍后重试"},
+			ErrSMSTooFrequent:        {Other: "验证码发送过于频繁，请稍后再试"},
 			ErrSMSCodeInvalid:        {Other: "验证码错误或不存在，请重试"},
 			ErrPhoneHasNoAccount:     {Other: "该手机号还没有账号，请使用短信登录自动注册首个账号"},
 			ErrNoPendingLoginAccount: {Other: "没有待选择的登录账号，请重新验证码登录"},
@@ -429,6 +444,7 @@ func resetCatalog() {
 			ErrAccountUnavailable:    {Other: "账号状态异常，无法继续操作"},
 			ErrPhoneNotBound:         {Other: "先绑定手机号再操作哦～"},
 			ErrPasswordNotSet:        {Other: "先设置密码再操作哦～"},
+			ErrPasswordTooWeak:       {Other: "密码需为 8-64 个字符，且至少包含字母、数字、符号中的两类"},
 			ErrCertificationRequired: {Other: "先完成账号认证再操作哦～"},
 			ErrInvalidReferrer:       {Other: "操作失败啦，请再次打开页面重新操作"},
 			ErrFileImageInvalid:      {Other: "图片仅支持 jpg/png/gif/webp 格式，不支持 SVG 等可携带脚本的图片"},
@@ -443,7 +459,7 @@ func resetCatalog() {
 			ErrStickerNotFound:      {Other: "贴纸不存在或已删除"},
 			ErrStickerTooLarge:      {Other: "贴纸过大，单张最大 10MB"},
 			ErrStickerImageInvalid:  {Other: "贴纸仅支持 jpg/png/gif/webp 图片"},
-			ErrStickerInvalid:       {Other: "贴纸使用错误，一条评论最多使用一个贴纸"},
+			ErrStickerInvalid:       {Other: "贴纸使用错误，一条评论最多使用 25 张贴纸"},
 			ErrStickerNotUsable:     {Other: "只能使用自己上传或已收藏的贴纸哦～"},
 			ErrStickerPackNotFound:  {Other: "贴纸包不存在"},
 			ErrStickerPackBanned:    {Other: "该贴纸包已被封禁，无法使用"},
@@ -461,6 +477,8 @@ func resetCatalog() {
 			OKAccountList:           {Other: "获取成功"},
 			OKLogout:                {Other: "退出登录成功"},
 			OKUserInfoUpdated:       {Other: "用户信息修改成功"},
+			OKPasswordUpdated:       {Other: "密码设置成功"},
+			OKPasswordStatus:        {Other: "获取成功"},
 			OKAvatarUpdated:         {Other: "头像设置成功"},
 			OKAvatarFetched:         {Other: "获取成功"},
 			OKMomentPublished:       {Other: "发布成功"},
@@ -487,6 +505,7 @@ func resetCatalog() {
 			OKStickerPackCreated:    {Other: "贴纸包创建成功"},
 			OKStickerPackList:       {Other: "获取成功"},
 			SMSActionLoginRegister:  {Other: "登录或注册"},
+			SMSActionChangePassword: {Other: "修改密码"},
 		},
 	}
 }

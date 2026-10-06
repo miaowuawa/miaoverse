@@ -2,6 +2,8 @@ package conf
 
 type AppConfig struct {
 	Server struct {
+		// Host 监听地址。为空时监听所有网卡（:port），配置 127.0.0.1 时只监听本机回环地址。
+		Host     string `yaml:"host"`
 		Port     int    `yaml:"port"`
 		LogLevel string `yaml:"log_level"`
 	} `yaml:"server"`

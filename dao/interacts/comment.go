@@ -1,6 +1,8 @@
 package interacts
 
 import (
+	"strings"
+
 	"gorm.io/gorm"
 	"miaoverse/consts"
 	modelinteracts "miaoverse/model/dao/interacts"
@@ -112,6 +114,62 @@ ORDER BY id ASC`
 		return nil, err
 	}
 	return list, nil
+}
+
+// CommentReplyStats 楼中楼回复统计：Count 为回复总数（含全部子孙回复），
+// MaxDepth 为相对首条评论的最大嵌套层数（首条评论为 0 层，直接回复为 1 层）。
+type CommentReplyStats struct {
+	Count    int64
+	MaxDepth int
+}
+
+// QueryCommentReplyStatsByRootsBatch 批量统计多个楼中楼首条评论下的回复总数与最大嵌套层数
+// （口径与 QueryCommentRepliesByRoot 一致）。用递归 CTE（WITH RECURSIVE）在数据库内部一次往返完成
+// 多个根的收集与分组统计，评论列表页无需逐条评论查询；层数信息用于前端判断是否在首条评论处
+// 提供「查看完整对话」入口。
+// 返回 rootID → 统计；无回复的根不出现在结果中（调用方按零值处理）。maxDepth 防止脏数据成环导致无限递归。
+// 要求 MySQL 8.0+ / MariaDB 10.2+（WITH RECURSIVE）。
+func (d *InteractsDAO) QueryCommentReplyStatsByRootsBatch(rootIDs []uint64, maxDepth int) (map[uint64]CommentReplyStats, error) {
+	result := map[uint64]CommentReplyStats{}
+	if len(rootIDs) == 0 {
+		return result, nil
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(rootIDs)), ",")
+	args := make([]any, 0, len(rootIDs)+4)
+	for _, id := range rootIDs {
+		args = append(args, id)
+	}
+	args = append(args, consts.CommentStatusNormal, consts.CommentTargetComment, consts.CommentStatusNormal, maxDepth)
+
+	sql := `
+WITH RECURSIVE reply_tree AS (
+    SELECT id, id AS root_id, 0 AS depth
+    FROM comment
+    WHERE id IN (` + placeholders + `) AND status = ?
+    UNION ALL
+    SELECT c.id, rt.root_id, rt.depth + 1
+    FROM comment c
+    INNER JOIN reply_tree rt ON c.target_id = rt.id
+    WHERE c.target_type = ? AND c.status = ? AND rt.depth < ?
+)
+SELECT root_id, COUNT(*) AS count, MAX(depth) AS max_depth
+FROM reply_tree
+WHERE depth > 0
+GROUP BY root_id`
+
+	var rows []struct {
+		RootID   uint64
+		Count    int64
+		MaxDepth int
+	}
+	if err := d.DB.Raw(sql, args...).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.RootID] = CommentReplyStats{Count: row.Count, MaxDepth: row.MaxDepth}
+	}
+	return result, nil
 }
 
 // QueryMomentComments 分页查询动态一级评论（target_type=moment, status=normal）。

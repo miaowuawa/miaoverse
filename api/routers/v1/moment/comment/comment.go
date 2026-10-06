@@ -15,11 +15,12 @@ import (
 	"miaoverse/model/dto/resp"
 	"miaoverse/model/server"
 	"miaoverse/service/Sticker"
+	"miaoverse/service/i18n"
 	"miaoverse/util/pagination"
 )
 
 // CreateHandler 给动态发送评论。内容屏蔽校验由 RequireNoContentBlock、拉黑校验由 RequireNoBlockUser 中间件完成，评论权限在此校验。
-// 评论内容可内嵌一个贴纸（[sticker:<uuid>] 标记随文本穿插展示），贴纸校验见 checkCommentSticker。
+// 评论内容可内嵌贴纸（[sticker:<uuid>] 标记随文本穿插展示，一条评论最多 consts.MaxCommentStickerTokens 张），贴纸校验见 checkCommentStickers。
 func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
@@ -35,7 +36,7 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	content := strings.TrimSpace(req.Content)
-	if req.MomentID == 0 || content == "" || len(content) > consts.MaxCommentLen {
+	if req.MomentID == 0 || content == "" || len(Sticker.StripTokens(content)) > consts.MaxCommentLen {
 		return resp.BadRequest(ctx)
 	}
 
@@ -48,9 +49,13 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return err
 	}
 
-	stickerUUID, err := checkCommentSticker(ctx, servants, uid, content)
+	stickerUUIDs, err := checkCommentStickers(ctx, servants, uid, content)
 	if err != nil {
 		return err
+	}
+	stickerUUID := ""
+	if len(stickerUUIDs) > 0 {
+		stickerUUID = stickerUUIDs[0]
 	}
 
 	comment := modelinteracts.Comment{
@@ -66,7 +71,12 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	info, err := buildCommentInfo(servants, created, moment.ID, 0, false)
+	// 被评论通知（旁路业务，失败不影响评论结果；自己评论自己的动态由服务层跳过）
+	if actor, ok := middleware.CurrentUser(ctx); ok {
+		servants.NotifyServant.NotifyComment(actor, moment.ID, moment.UserID, content, i18n.LanguageFromCtx(ctx))
+	}
+
+	info, err := buildCommentInfo(servants, created, moment.ID, 0, false, 0, 0)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
@@ -74,7 +84,8 @@ func CreateHandler(ctx fiber.Ctx, servants *server.Servants) error {
 }
 
 // ReplyHandler 回复动态下的评论（楼中楼）。内容屏蔽校验由 RequireNoContentBlock、拉黑/被拉黑校验由 RequireNoBlockUser 中间件完成，
-// 评论权限按所属动态的评论权限校验，并写入互动记录（type=reply）。贴纸规则与评论一致。
+// 评论权限按所属动态的评论权限校验，并写入互动记录（type=reply）。贴纸规则与评论一致（可多张，最多 consts.MaxCommentStickerTokens 张）。
+// 被回复的评论既可以是楼中楼首条评论，也可以是任意楼中楼回复（回复他人的回复）。
 func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
@@ -90,7 +101,7 @@ func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	content := strings.TrimSpace(req.Content)
-	if content == "" || len(content) > consts.MaxCommentLen {
+	if content == "" || len(Sticker.StripTokens(content)) > consts.MaxCommentLen {
 		return resp.BadRequest(ctx)
 	}
 
@@ -111,9 +122,13 @@ func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return err
 	}
 
-	stickerUUID, err := checkCommentSticker(ctx, servants, uid, content)
+	stickerUUIDs, err := checkCommentStickers(ctx, servants, uid, content)
 	if err != nil {
 		return err
+	}
+	stickerUUID := ""
+	if len(stickerUUIDs) > 0 {
+		stickerUUID = stickerUUIDs[0]
 	}
 
 	comment := modelinteracts.Comment{
@@ -138,17 +153,23 @@ func ReplyHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	sticker, err := resolveSticker(servants, created.StickerUUID)
+	// 被回复通知（旁路业务，失败不影响回复结果；自己回复自己由服务层跳过）
+	if actor, ok := middleware.CurrentUser(ctx); ok {
+		servants.NotifyServant.NotifyReply(actor, replied.ID, replied.UserID, content, i18n.LanguageFromCtx(ctx))
+	}
+
+	info, err := buildReplyInfo(servants, created, moment.ID, replied.UserID, 0, false)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
-	return resp.ReplyCreated(ctx, toReplyInfo(created, moment.ID, replied.UserID, sticker))
+	return resp.ReplyCreated(ctx, info)
 }
 
 // ListHandler 获取动态一级评论分页列表（需登录）。
 // 排序：sort=hot（默认，按点赞数倒序）/ sort=time（按时间倒序）。
 // 内容屏蔽校验由 RequireNoContentBlock、拉黑校验由 RequireNoBlockUser 中间件完成（与动态详情一致）。
-// 返回的评论 Content 中保留贴纸内嵌标记 [sticker:<uuid>]，Sticker 为贴纸展示信息（Hidden=true 时前端提示「部分贴纸未显示」）。
+// 返回的评论 Content 中保留贴纸内嵌标记 [sticker:<uuid>]，Stickers 为各标记位置的贴纸展示信息（Hidden=true 时前端提示「部分贴纸未显示」），
+// ReplyCount 为该评论楼中楼下的回复总数（含全部子孙回复）。
 func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	uid, ok := middleware.CurrentUID(ctx)
 	if !ok {
@@ -183,13 +204,11 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	commentIDs := make([]uint64, 0, len(comments))
 	authorIDs := make([]uint32, 0, len(comments))
-	stickerUUIDs := make([]string, 0, len(comments))
+	contents := make([]string, 0, len(comments))
 	for i := range comments {
 		commentIDs = append(commentIDs, comments[i].ID)
 		authorIDs = append(authorIDs, comments[i].UserID)
-		if comments[i].StickerUUID != "" {
-			stickerUUIDs = append(stickerUUIDs, comments[i].StickerUUID)
-		}
+		contents = append(contents, comments[i].Content)
 	}
 
 	authors, err := servants.UserServant.QueryUsersByIDs(authorIDs)
@@ -204,14 +223,19 @@ func ListHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
-	stickers, err := Sticker.ResolveCommentStickers(servants, stickerUUIDs)
+	replyStats, err := servants.InteractsServant.QueryCommentReplyStatsByRootsBatch(commentIDs, consts.MaxConversationDepth)
+	if err != nil {
+		return resp.ServerError(ctx)
+	}
+	stickers, err := Sticker.ResolveContentsStickers(servants, contents)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
 
 	items := make([]resp.CommentInfo, 0, len(comments))
 	for i := range comments {
-		items = append(items, toCommentInfoWith(&comments[i], moment.ID, authors[comments[i].UserID], likes[comments[i].ID], liked[comments[i].ID], lookupSticker(stickers, comments[i].StickerUUID)))
+		stats := replyStats[comments[i].ID]
+		items = append(items, toCommentInfoWith(&comments[i], moment.ID, authors[comments[i].UserID], likes[comments[i].ID], liked[comments[i].ID], stats.Count, stats.MaxDepth, stickers[i]))
 	}
 	return resp.CommentList(ctx, count, items)
 }
@@ -230,6 +254,11 @@ func LikeCommentHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	if err := servants.InteractsServant.LikeCommentAndMeta(uid, comment.ID, comment.UserID); err != nil {
 		return resp.ServerError(ctx)
+	}
+
+	// 被点赞通知（旁路业务，失败不影响点赞结果；自己给自己的评论点赞由服务层跳过）
+	if actor, ok := middleware.CurrentUser(ctx); ok {
+		servants.NotifyServant.NotifyLikeComment(actor, comment.ID, comment.UserID, comment.Content, i18n.LanguageFromCtx(ctx))
 	}
 
 	return resp.InteractOK(ctx, comment.ID, consts.ActionLike)
@@ -281,23 +310,23 @@ func ConversationHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.ServerError(ctx)
 	}
 
-	authorByID := map[uint64]uint32{root.ID: root.UserID}
+	// 被回复评论作者：reply_to_id 为回复链上的上一环（可能是楼中楼首条评论，也可能是任意楼中楼回复）
+	replyToUserID := map[uint64]uint32{root.ID: root.UserID}
 	for i := range replies {
-		authorByID[replies[i].ID] = replies[i].UserID
+		replyToUserID[replies[i].ID] = replies[i].UserID
 	}
 
-	// 批量装配点赞状态与贴纸展示信息
+	// 批量装配点赞状态、回复作者与贴纸展示信息
 	commentIDs := make([]uint64, 0, len(replies)+1)
 	commentIDs = append(commentIDs, root.ID)
-	stickerUUIDs := make([]string, 0, len(replies)+1)
-	if root.StickerUUID != "" {
-		stickerUUIDs = append(stickerUUIDs, root.StickerUUID)
-	}
+	userIDs := make([]uint32, 0, len(replies)+1)
+	userIDs = append(userIDs, root.UserID)
+	contents := make([]string, 0, len(replies)+1)
+	contents = append(contents, root.Content)
 	for i := range replies {
 		commentIDs = append(commentIDs, replies[i].ID)
-		if replies[i].StickerUUID != "" {
-			stickerUUIDs = append(stickerUUIDs, replies[i].StickerUUID)
-		}
+		userIDs = append(userIDs, replies[i].UserID)
+		contents = append(contents, replies[i].Content)
 	}
 	likes, err := servants.InteractsServant.QueryCommentInteractCountsBatch(commentIDs)
 	if err != nil {
@@ -307,16 +336,16 @@ func ConversationHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
-	stickers, err := Sticker.ResolveCommentStickers(servants, stickerUUIDs)
+	authors, err := servants.UserServant.QueryUsersByIDs(userIDs)
+	if err != nil {
+		return resp.ServerError(ctx)
+	}
+	stickers, err := Sticker.ResolveContentsStickers(servants, contents)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
 
-	rootInfo, err := buildCommentInfo(servants, root, moment.ID, likes[root.ID], liked[root.ID])
-	if err != nil {
-		return resp.ServerError(ctx)
-	}
-	rootInfo.Sticker = lookupSticker(stickers, root.StickerUUID)
+	rootInfo := toCommentInfoWith(root, moment.ID, authors[root.UserID], likes[root.ID], liked[root.ID], int64(len(replies)), maxReplyDepth(root.ID, replies), stickers[0])
 
 	start := offset
 	if start > len(replies) {
@@ -329,7 +358,7 @@ func ConversationHandler(ctx fiber.Ctx, servants *server.Servants) error {
 
 	items := make([]resp.ReplyInfo, 0, end-start)
 	for i := start; i < end; i++ {
-		items = append(items, toReplyInfo(&replies[i], moment.ID, authorByID[replies[i].TargetID], lookupSticker(stickers, replies[i].StickerUUID)))
+		items = append(items, toReplyInfoWith(&replies[i], moment.ID, replyToUserID[replies[i].TargetID], authors[replies[i].UserID], likes[replies[i].ID], liked[replies[i].ID], stickers[i+1]))
 	}
 
 	return resp.Conversation(ctx, resp.ConversationInfo{
@@ -339,35 +368,71 @@ func ConversationHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	})
 }
 
-// buildCommentInfo 组装评论响应 DTO：附作者、点赞数/点赞状态与贴纸展示信息。
-func buildCommentInfo(servants *server.Servants, c *modelinteracts.Comment, momentID uint64, likes uint32, liked bool) (resp.CommentInfo, error) {
+// buildCommentInfo 组装评论响应 DTO：附作者、点赞数/点赞状态、楼中楼回复数/层数与贴纸展示信息。
+func buildCommentInfo(servants *server.Servants, c *modelinteracts.Comment, momentID uint64, likes uint32, liked bool, replyCount int64, replyDepth int) (resp.CommentInfo, error) {
 	author, err := servants.UserServant.QueryByID(c.UserID)
 	if err != nil {
 		return resp.CommentInfo{}, err
 	}
-	sticker, err := resolveSticker(servants, c.StickerUUID)
+	stickers, err := Sticker.ResolveContentStickers(servants, c.Content)
 	if err != nil {
 		return resp.CommentInfo{}, err
 	}
-	return toCommentInfoWith(c, momentID, *author, likes, liked, sticker), nil
+	return toCommentInfoWith(c, momentID, *author, likes, liked, replyCount, replyDepth, stickers), nil
 }
 
-func toCommentInfoWith(c *modelinteracts.Comment, momentID uint64, author modeluser.User, likes uint32, liked bool, sticker *resp.CommentSticker) resp.CommentInfo {
+// buildReplyInfo 组装楼中楼回复响应 DTO：附回复作者、点赞数/点赞状态与贴纸展示信息。
+func buildReplyInfo(servants *server.Servants, c *modelinteracts.Comment, momentID uint64, replyToUserID uint32, likes uint32, liked bool) (resp.ReplyInfo, error) {
+	author, err := servants.UserServant.QueryByID(c.UserID)
+	if err != nil {
+		return resp.ReplyInfo{}, err
+	}
+	stickers, err := Sticker.ResolveContentStickers(servants, c.Content)
+	if err != nil {
+		return resp.ReplyInfo{}, err
+	}
+	return toReplyInfoWith(c, momentID, replyToUserID, *author, likes, liked, stickers), nil
+}
+
+func toCommentInfoWith(c *modelinteracts.Comment, momentID uint64, author modeluser.User, likes uint32, liked bool, replyCount int64, replyDepth int, stickers []resp.CommentSticker) resp.CommentInfo {
 	return resp.CommentInfo{
-		ID:        c.ID,
-		UserID:    c.UserID,
-		MomentID:  momentID,
-		Content:   c.Content,
-		Status:    c.Status,
-		CreatedAt: c.CreatedAt.Format("2006-01-02 15:04:05"),
-		Author:    author,
-		Likes:     likes,
-		IsLiked:   liked,
-		Sticker:   sticker,
+		ID:         c.ID,
+		UserID:     c.UserID,
+		MomentID:   momentID,
+		Content:    c.Content,
+		Status:     c.Status,
+		CreatedAt:  c.CreatedAt,
+		Author:     author,
+		Likes:      likes,
+		IsLiked:    liked,
+		ReplyCount: replyCount,
+		ReplyDepth: replyDepth,
+		Stickers:   stickers,
 	}
 }
 
-func toReplyInfo(c *modelinteracts.Comment, momentID uint64, replyToUserID uint32, sticker *resp.CommentSticker) resp.ReplyInfo {
+// maxReplyDepth 计算扁平回复列表相对首条评论的最大嵌套层数（首条评论为 0 层，直接回复为 1 层）。
+// 回复按 id 升序返回，而回复只能指向更早创建的评论（父节点 id 更小），因此按序一次遍历即可得到各回复层数；
+// 父节点缺失（被删除等）时按第 1 层处理。
+func maxReplyDepth(rootID uint64, replies []modelinteracts.Comment) int {
+	depth := make(map[uint64]int, len(replies)+1)
+	depth[rootID] = 0
+	max := 0
+	for i := range replies {
+		d, ok := depth[replies[i].TargetID]
+		if !ok {
+			d = 0
+		}
+		d++
+		depth[replies[i].ID] = d
+		if d > max {
+			max = d
+		}
+	}
+	return max
+}
+
+func toReplyInfoWith(c *modelinteracts.Comment, momentID uint64, replyToUserID uint32, author modeluser.User, likes uint32, liked bool, stickers []resp.CommentSticker) resp.ReplyInfo {
 	return resp.ReplyInfo{
 		ID:            c.ID,
 		UserID:        c.UserID,
@@ -376,66 +441,45 @@ func toReplyInfo(c *modelinteracts.Comment, momentID uint64, replyToUserID uint3
 		ReplyToUserID: replyToUserID,
 		Content:       c.Content,
 		Status:        c.Status,
-		CreatedAt:     c.CreatedAt.Format("2006-01-02 15:04:05"),
-		Sticker:       sticker,
+		CreatedAt:     c.CreatedAt,
+		Author:        author,
+		Likes:         likes,
+		IsLiked:       liked,
+		Stickers:      stickers,
 	}
 }
 
-// resolveSticker 解析单条评论的贴纸展示信息（无贴纸返回 nil）。
-func resolveSticker(servants *server.Servants, stickerUUID string) (*resp.CommentSticker, error) {
-	if stickerUUID == "" {
-		return nil, nil
-	}
-	resolved, err := Sticker.ResolveCommentStickers(servants, []string{stickerUUID})
-	if err != nil {
-		return nil, err
-	}
-	return lookupSticker(resolved, stickerUUID), nil
-}
-
-// lookupSticker 从批量解析结果取贴纸展示信息（无贴纸返回 nil）。
-func lookupSticker(resolved map[string]resp.CommentSticker, stickerUUID string) *resp.CommentSticker {
-	if stickerUUID == "" {
-		return nil
-	}
-	info, ok := resolved[strings.ToLower(stickerUUID)]
-	if !ok {
-		return nil
-	}
-	return &info
-}
-
-// checkCommentSticker 校验评论内容中的贴纸使用并返回贴纸 UUID（无贴纸返回空串）。
-// 产品规则：登录且绑定手机号的用户可使用贴纸；一条评论最多一个贴纸；
+// checkCommentStickers 校验评论内容中的贴纸使用并按出现顺序返回贴纸 UUID 列表（无贴纸返回 nil）。
+// 产品规则：登录且绑定手机号的用户可使用贴纸；一条评论最多 consts.MaxCommentStickerTokens 张贴纸；
 // 仅可使用本人上传/已加入收藏夹/已收藏贴纸包内且未被封禁的贴纸。
-func checkCommentSticker(ctx fiber.Ctx, servants *server.Servants, uid uint32, content string) (string, error) {
-	stickerUUID, err := Sticker.CheckCommentSticker(servants, uid, content)
+func checkCommentStickers(ctx fiber.Ctx, servants *server.Servants, uid uint32, content string) ([]string, error) {
+	stickerUUIDs, err := Sticker.CheckCommentStickers(servants, uid, content)
 	if err != nil {
 		switch {
 		case errors.Is(err, Sticker.ErrTokenExceeded):
-			return "", resp.StickerInvalid(ctx)
+			return nil, resp.StickerInvalid(ctx)
 		case errors.Is(err, Sticker.ErrNotFound):
-			return "", resp.StickerNotFound(ctx)
+			return nil, resp.StickerNotFound(ctx)
 		case errors.Is(err, Sticker.ErrPackBanned):
-			return "", resp.StickerPackBanned(ctx)
+			return nil, resp.StickerPackBanned(ctx)
 		case errors.Is(err, Sticker.ErrNotUsable):
-			return "", resp.StickerNotUsable(ctx)
+			return nil, resp.StickerNotUsable(ctx)
 		default:
-			return "", resp.ServerError(ctx)
+			return nil, resp.ServerError(ctx)
 		}
 	}
-	if stickerUUID == "" {
-		return "", nil
+	if len(stickerUUIDs) == 0 {
+		return nil, nil
 	}
 
 	bound, err := servants.UserServant.HasCredential(uid, consts.Phone)
 	if err != nil {
-		return "", resp.ServerError(ctx)
+		return nil, resp.ServerError(ctx)
 	}
 	if !bound {
-		return "", resp.PhoneNotBound(ctx)
+		return nil, resp.PhoneNotBound(ctx)
 	}
-	return stickerUUID, nil
+	return stickerUUIDs, nil
 }
 
 // checkCommentPermission 按动态的评论权限校验：
