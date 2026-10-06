@@ -24,6 +24,12 @@ WHERE `id` IN (
 -- 2. 添加生成列 + 唯一索引，从数据库层面彻底消除单实例互动的重复行竞态。
 --    评论（103）/回复（104）/私信（100-102）允许同一用户对同一目标多次操作，
 --    single_key 为 NULL（NULL 不参与唯一约束），因此不能用整表四列唯一索引。
+--    生成列必须用 VIRTUAL 而不是 STORED：interacts 上存在 fk_interacts_user_from /
+--    fk_interacts_user_to 两个外键，而 MySQL 8.4 对“带外键的表 + STORED 生成列”的
+--    任意变更（ADD COLUMN / CREATE TABLE / ADD FOREIGN KEY）都会报
+--    Error 1215 (HY000): Cannot add foreign key constraint，导致服务启动即崩溃。
+--    VIRTUAL 生成列与外键兼容，且其唯一索引同样由 InnoDB 维护并强制约束，
+--    INSERT ... ON DUPLICATE KEY UPDATE 语义与 STORED 版本一致。
 --    MySQL 8 不支持 ADD COLUMN IF NOT EXISTS，这里用 information_schema 检查 +
 --    PREPARE 动态执行，保证 db.sql 已建好列（全新库场景）时本迁移幂等跳过。
 SET @has_single_key = (SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -31,7 +37,7 @@ SET @has_single_key = (SELECT COUNT(*) FROM information_schema.COLUMNS
                          AND TABLE_NAME = 'interacts'
                          AND COLUMN_NAME = 'single_key');
 
-SET @ddl = IF(@has_single_key = 0, 'ALTER TABLE `interacts` ADD COLUMN `single_key` VARCHAR(64) GENERATED ALWAYS AS (IF(`type` IN (0, 1, 2, 3, 4), CONCAT(`user_from`, '':'', `target_id`, '':'', `type`, '':'', `target_type`), NULL)) STORED COMMENT ''unique key for single-instance interactions (follow/like/share/repost/favorite), NULL for multi-instance types'', ADD UNIQUE KEY `uk_interacts_single_key` (`single_key`)', 'SELECT 1');
+SET @ddl = IF(@has_single_key = 0, 'ALTER TABLE `interacts` ADD COLUMN `single_key` VARCHAR(64) GENERATED ALWAYS AS (IF(`type` IN (0, 1, 2, 3, 4), CONCAT(`user_from`, '':'', `target_id`, '':'', `type`, '':'', `target_type`), NULL)) VIRTUAL COMMENT ''unique key for single-instance interactions (follow/like/share/repost/favorite), NULL for multi-instance types'', ADD UNIQUE KEY `uk_interacts_single_key` (`single_key`)', 'SELECT 1');
 PREPARE stmt FROM @ddl;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;

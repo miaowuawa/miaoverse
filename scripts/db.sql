@@ -132,11 +132,13 @@ CREATE TABLE IF NOT EXISTS `interacts` (
     `target_type`  TINYINT UNSIGNED NOT NULL COMMENT '0 user, 1 moment, 2 comment, 3 reply',
     `status`       TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0 normal, 9 revoked, 10 forced revoked',
     `acted_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- single_key 必须用 VIRTUAL：本表带 fk_interacts_user_from / fk_interacts_user_to 外键，
+    -- MySQL 8.4 上“带外键的表 + STORED 生成列”会报 Error 1215，建表/加列都会失败。
     `single_key`   VARCHAR(64) GENERATED ALWAYS AS (
                        IF(`type` IN (0, 1, 2, 3, 4),
                           CONCAT(`user_from`, ':', `target_id`, ':', `type`, ':', `target_type`),
                           NULL)
-                   ) STORED COMMENT 'unique key for single-instance interactions (follow/like/share/repost/favorite), NULL for multi-instance types',
+                   ) VIRTUAL COMMENT 'unique key for single-instance interactions (follow/like/share/repost/favorite), NULL for multi-instance types',
     PRIMARY KEY (`id`),
     KEY `idx_interacts_user_from` (`user_from`),
     KEY `idx_interacts_user_to` (`user_to`),
