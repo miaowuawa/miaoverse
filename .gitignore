@@ -1,3 +1,7 @@
 /dist
 /config.yaml
 /config.yml
+
+# IDE / 操作系统生成文件
+/.idea/
+.DS_Store
