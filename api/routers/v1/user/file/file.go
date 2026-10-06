@@ -1,10 +1,7 @@
 package file
 
 import (
-	"crypto/sha256"
 	"errors"
-	"io"
-	"mime/multipart"
 	"path/filepath"
 	"strings"
 
@@ -53,7 +50,7 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 		return resp.BadRequest(ctx)
 	}
 
-	fileHash, err := hashUploadedFile(fileHeader)
+	fileHash, err := UserFile.HashUploadedFile(fileHeader)
 	if err != nil {
 		return resp.ServerError(ctx)
 	}
@@ -65,6 +62,21 @@ func UploadHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 	fileExt := strings.TrimPrefix(strings.ToLower(filepath.Ext(fileName)), ".")
 	fileType := util.FileType.Normalize(req.FileType, mimeType)
+
+	// 安全：图片上传防「图片藏 JS」（存储型 XSS）——按文件头魔数嗅探真实类型，
+	// 仅接受 jpg/png/gif/webp 安全栅格图片，拒绝 SVG/HTML/JS 等可携带脚本的格式
+	// 以及「声明 image/png 实际为 SVG」的伪装上传；存储 mime_type 与 S3 Content-Type
+	// 使用嗅探出的真实类型，避免浏览器按伪造类型解析。
+	if fileType == consts.FileTypeImage {
+		detectedMIME, safe, err := UserFile.DetectSafeUploadedImage(fileHeader, mimeType)
+		if err != nil {
+			return resp.ServerError(ctx)
+		}
+		if !safe {
+			return resp.FileImageInvalid(ctx)
+		}
+		mimeType = detectedMIME
+	}
 
 	reusedFile, err := servants.UserServant.QueryActiveFileByHash(fileHash)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -202,20 +214,4 @@ func SharedTempLinkHandler(ctx fiber.Ctx, servants *server.Servants) error {
 	}
 
 	return resp.FileTempLink(ctx, record.UUID, link.URL, link.ExpiresAt)
-}
-
-func hashUploadedFile(fileHeader *multipart.FileHeader) ([32]byte, error) {
-	var fileHash [32]byte
-	src, err := fileHeader.Open()
-	if err != nil {
-		return fileHash, err
-	}
-	defer src.Close()
-
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, src); err != nil {
-		return fileHash, err
-	}
-	copy(fileHash[:], hasher.Sum(nil))
-	return fileHash, nil
 }

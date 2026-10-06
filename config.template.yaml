@@ -65,6 +65,7 @@ s3:
 
 upload:
   max_file_size_bytes: 20971520
+  max_sticker_size_bytes: 10485760
 
 cache:
   dbnum:

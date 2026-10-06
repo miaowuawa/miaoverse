@@ -39,6 +39,7 @@ const (
 	ErrCertificationRequired MessageKey = "error.certification_required"
 	ErrInvalidReferrer       MessageKey = "error.invalid_referrer"
 	ErrFileTooLarge          MessageKey = "error.file_too_large"
+	ErrFileImageInvalid      MessageKey = "error.file_image_invalid"
 	ErrFileNotFound          MessageKey = "error.file_not_found"
 	ErrFileNotShared         MessageKey = "error.file_not_shared"
 	ErrFileBlockedByOwner    MessageKey = "error.file_blocked_by_owner"
@@ -48,6 +49,16 @@ const (
 	ErrContentBlocked        MessageKey = "error.content_blocked"
 	ErrS3Unavailable         MessageKey = "error.s3_unavailable"
 	ErrNeedLogin             MessageKey = "error.need_login"
+
+	ErrStickerNotFound      MessageKey = "error.sticker_not_found"
+	ErrStickerTooLarge      MessageKey = "error.sticker_too_large"
+	ErrStickerImageInvalid  MessageKey = "error.sticker_image_invalid"
+	ErrStickerInvalid       MessageKey = "error.sticker_invalid"
+	ErrStickerNotUsable     MessageKey = "error.sticker_not_usable"
+	ErrStickerPackNotFound  MessageKey = "error.sticker_pack_not_found"
+	ErrStickerPackBanned    MessageKey = "error.sticker_pack_banned"
+	ErrStickerPackFull      MessageKey = "error.sticker_pack_full"
+	ErrStickerFavoritesFull MessageKey = "error.sticker_favorites_full"
 
 	UserClosedUsername MessageKey = "user.closed_username"
 	UserClosedBio      MessageKey = "user.closed_bio"
@@ -81,6 +92,12 @@ const (
 	OKArticleNeedSegments   MessageKey = "ok.article_need_segments"
 	OKArticleSegmentFetched MessageKey = "ok.article_segment_fetched"
 	OKFeedFetched           MessageKey = "ok.feed_fetched"
+	OKCommentsFetched       MessageKey = "ok.comments_fetched"
+	OKStickerUploaded       MessageKey = "ok.sticker_uploaded"
+	OKStickerList           MessageKey = "ok.sticker_list"
+	OKStickerUpdated        MessageKey = "ok.sticker_updated"
+	OKStickerPackCreated    MessageKey = "ok.sticker_pack_created"
+	OKStickerPackList       MessageKey = "ok.sticker_pack_list"
 	SMSActionLoginRegister  MessageKey = "sms.action.login_register"
 )
 
@@ -414,6 +431,7 @@ func resetCatalog() {
 			ErrPasswordNotSet:        {Other: "先设置密码再操作哦～"},
 			ErrCertificationRequired: {Other: "先完成账号认证再操作哦～"},
 			ErrInvalidReferrer:       {Other: "操作失败啦，请再次打开页面重新操作"},
+			ErrFileImageInvalid:      {Other: "图片仅支持 jpg/png/gif/webp 格式，不支持 SVG 等可携带脚本的图片"},
 			ErrFileNotShared:         {Other: "此文件并未公开分享，请检查登录账号"},
 			ErrFileBlockedByOwner:    {Other: "由于对方权限设置，无法查看此文件"},
 			ErrBlockedByRelation:     {Other: "由于对方权限设置，无法查看此内容"},
@@ -421,6 +439,16 @@ func resetCatalog() {
 			ErrTargetPunished:        {Other: "该用户存在违规记录，部分功能受限"},
 			ErrContentBlocked:        {Other: "内容因违规被屏蔽，无法显示"},
 			ErrNeedLogin:             {Other: "请先登录后再查看"},
+
+			ErrStickerNotFound:      {Other: "贴纸不存在或已删除"},
+			ErrStickerTooLarge:      {Other: "贴纸过大，单张最大 10MB"},
+			ErrStickerImageInvalid:  {Other: "贴纸仅支持 jpg/png/gif/webp 图片"},
+			ErrStickerInvalid:       {Other: "贴纸使用错误，一条评论最多使用一个贴纸"},
+			ErrStickerNotUsable:     {Other: "只能使用自己上传或已收藏的贴纸哦～"},
+			ErrStickerPackNotFound:  {Other: "贴纸包不存在"},
+			ErrStickerPackBanned:    {Other: "该贴纸包已被封禁，无法使用"},
+			ErrStickerPackFull:      {Other: "一个贴纸包最多添加 100 张贴纸"},
+			ErrStickerFavoritesFull: {Other: "收藏夹最多添加 500 张贴纸"},
 
 			UserClosedUsername: {Other: "已注销的账号"},
 			UserClosedBio:      {Other: "用户已注销。虽然我不知道 TA 在三次元过得好不好，但我替这个账号感谢你最后的回眸。 —— 站长留"},
@@ -452,6 +480,12 @@ func resetCatalog() {
 			OKArticleNeedSegments:   {Other: "文章过长，请使用分段接口获取正文"},
 			OKArticleSegmentFetched: {Other: "获取成功"},
 			OKFeedFetched:           {Other: "获取成功"},
+			OKCommentsFetched:       {Other: "获取成功"},
+			OKStickerUploaded:       {Other: "贴纸上传成功"},
+			OKStickerList:           {Other: "获取成功"},
+			OKStickerUpdated:        {Other: "操作成功"},
+			OKStickerPackCreated:    {Other: "贴纸包创建成功"},
+			OKStickerPackList:       {Other: "获取成功"},
 			SMSActionLoginRegister:  {Other: "登录或注册"},
 		},
 	}

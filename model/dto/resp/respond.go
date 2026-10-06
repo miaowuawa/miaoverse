@@ -86,6 +86,11 @@ func FileTooLarge(ctx fiber.Ctx) error {
 	return JSON(ctx, fiber.StatusRequestEntityTooLarge, i18n.ErrFileTooLarge)
 }
 
+// FileImageInvalid 图片上传未通过安全图片校验（非 jpg/png/gif/webp 或伪装上传「图片藏 JS」），body 中 code 为 HTTP 400。
+func FileImageInvalid(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusBadRequest, i18n.ErrFileImageInvalid)
+}
+
 func FileNotFound(ctx fiber.Ctx) error {
 	return JSON(ctx, fiber.StatusNotFound, i18n.ErrFileNotFound)
 }
@@ -219,10 +224,24 @@ func UserInfoOK(ctx fiber.Ctx, info UserInfo) error {
 }
 
 func CommentCreated(ctx fiber.Ctx, comment CommentInfo) error {
+	MaskClosedAccount(ctx, &comment.Author)
 	return ctx.Status(fiber.StatusCreated).JSON(CodeWithMsgComment{
 		Code:    fiber.StatusCreated,
 		Msg:     i18n.Message(ctx, i18n.OKCommentCreated),
 		Comment: comment,
+	})
+}
+
+// CommentList 返回动态一级评论分页列表，已注销作者的展示字段统一打码。
+func CommentList(ctx fiber.Ctx, count int64, comments []CommentInfo) error {
+	for i := range comments {
+		MaskClosedAccount(ctx, &comments[i].Author)
+	}
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgCommentList{
+		Code:     fiber.StatusOK,
+		Msg:      i18n.Message(ctx, i18n.OKCommentsFetched),
+		Count:    count,
+		Comments: comments,
 	})
 }
 
@@ -235,6 +254,7 @@ func ReplyCreated(ctx fiber.Ctx, reply ReplyInfo) error {
 }
 
 func Conversation(ctx fiber.Ctx, conversation ConversationInfo) error {
+	MaskClosedAccount(ctx, &conversation.Root.Author)
 	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgConversation{
 		Code:         fiber.StatusOK,
 		Msg:          i18n.Message(ctx, i18n.OKConversationFetched),
@@ -261,4 +281,106 @@ func InteractOK(ctx fiber.Ctx, target uint64, action string) error {
 		Target: target,
 		Action: action,
 	})
+}
+
+// ===== 贴纸 =====
+
+func StickerUploaded(ctx fiber.Ctx, sticker StickerInfo) error {
+	return ctx.Status(fiber.StatusCreated).JSON(CodeWithMsgSticker{
+		Code:    fiber.StatusCreated,
+		Msg:     i18n.Message(ctx, i18n.OKStickerUploaded),
+		Sticker: sticker,
+	})
+}
+
+func StickerOK(ctx fiber.Ctx, sticker StickerInfo) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgSticker{
+		Code:    fiber.StatusOK,
+		Msg:     i18n.Message(ctx, i18n.OKStickerUpdated),
+		Sticker: sticker,
+	})
+}
+
+func StickerList(ctx fiber.Ctx, count int64, stickers []StickerInfo) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgStickerList{
+		Code:     fiber.StatusOK,
+		Msg:      i18n.Message(ctx, i18n.OKStickerList),
+		Count:    count,
+		Stickers: stickers,
+	})
+}
+
+func StickerPackCreated(ctx fiber.Ctx, pack StickerPackInfo) error {
+	return ctx.Status(fiber.StatusCreated).JSON(CodeWithMsgStickerPack{
+		Code: fiber.StatusCreated,
+		Msg:  i18n.Message(ctx, i18n.OKStickerPackCreated),
+		Pack: pack,
+	})
+}
+
+func StickerPackOK(ctx fiber.Ctx, pack StickerPackInfo) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgStickerPack{
+		Code: fiber.StatusOK,
+		Msg:  i18n.Message(ctx, i18n.OKStickerUpdated),
+		Pack: pack,
+	})
+}
+
+func StickerPackList(ctx fiber.Ctx, count int64, packs []StickerPackInfo) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgStickerPackList{
+		Code:  fiber.StatusOK,
+		Msg:   i18n.Message(ctx, i18n.OKStickerPackList),
+		Count: count,
+		Packs: packs,
+	})
+}
+
+func StickerPackDetail(ctx fiber.Ctx, pack StickerPackInfo, stickers []StickerInfo) error {
+	return ctx.Status(fiber.StatusOK).JSON(CodeWithMsgStickerPackDetail{
+		Code:     fiber.StatusOK,
+		Msg:      i18n.Message(ctx, i18n.OKStickerList),
+		Pack:     pack,
+		Stickers: stickers,
+	})
+}
+
+func StickerNotFound(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusNotFound, i18n.ErrStickerNotFound)
+}
+
+func StickerPackNotFound(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusNotFound, i18n.ErrStickerPackNotFound)
+}
+
+func StickerTooLarge(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusRequestEntityTooLarge, i18n.ErrStickerTooLarge)
+}
+
+func StickerImageInvalid(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusBadRequest, i18n.ErrStickerImageInvalid)
+}
+
+func StickerInvalid(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusBadRequest, i18n.ErrStickerInvalid)
+}
+
+func StickerNotUsable(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusForbidden, i18n.ErrStickerNotUsable)
+}
+
+func StickerPackBanned(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusForbidden, i18n.ErrStickerPackBanned)
+}
+
+func StickerPackFull(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusBadRequest, i18n.ErrStickerPackFull)
+}
+
+func StickerFavoritesFull(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusBadRequest, i18n.ErrStickerFavoritesFull)
+}
+
+// PhoneNotBound 需要绑定手机号才能执行的操作（如上传/使用贴纸），body 中 code 为 HTTP 403。
+func PhoneNotBound(ctx fiber.Ctx) error {
+	return JSON(ctx, fiber.StatusForbidden, i18n.ErrPhoneNotBound)
 }

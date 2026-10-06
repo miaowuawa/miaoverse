@@ -13,6 +13,7 @@ import (
 	"miaoverse/dao/article"
 	"miaoverse/dao/content"
 	"miaoverse/dao/interacts"
+	"miaoverse/dao/sticker"
 	"miaoverse/dao/user"
 	"miaoverse/model/server"
 	"miaoverse/model/server/conf"
@@ -119,6 +120,10 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 	interactsdao := &interacts.InteractsDAO{}
 	interactsdao.DB = db
 
+	//init sticker DAO
+	stickerdao := &sticker.StickerDAO{}
+	stickerdao.DB = db
+
 	//init user block bitmap servant
 	blockServant := UserBlock.NewServant(smsRedisClient, conf.Cache.DB)
 	//step3 validator
@@ -178,12 +183,14 @@ func ConfToServants(conf *conf.AppConfig) (*server.Servants, error) {
 		UserServant:         userdao,
 		ContentServant:      contentdao,
 		InteractsServant:    interactsdao,
+		StickerServant:      stickerdao,
 		ArticleServant:      articleServant,
 		BlockServant:        blockServant,
 		Validator:           validator,
 		S3Servant:           s3Servant,
 		MongoServant:        mongoServant,
 		MaxUploadFileSize:   conf.UploadMaxFileSizeBytes(),
+		MaxStickerFileSize:  conf.UploadMaxStickerSizeBytes(),
 	}, nil
 
 }

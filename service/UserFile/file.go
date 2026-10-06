@@ -2,9 +2,12 @@ package UserFile
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"mime/multipart"
 	"path/filepath"
 	"strings"
 
@@ -14,6 +17,7 @@ import (
 	"miaoverse/model/dto/resp"
 	"miaoverse/service/UserBlock"
 	storages3 "miaoverse/service/s3"
+	"miaoverse/util/filetype"
 )
 
 var (
@@ -37,6 +41,58 @@ func SanitizeFileName(value string) string {
 		return ""
 	}
 	return value
+}
+
+// HashUploadedFile 计算上传文件的 SHA-256 hash（相同 hash 文件复用存储，避免重复上传）。
+func HashUploadedFile(fileHeader *multipart.FileHeader) ([32]byte, error) {
+	var fileHash [32]byte
+	src, err := fileHeader.Open()
+	if err != nil {
+		return fileHash, err
+	}
+	defer src.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, src); err != nil {
+		return fileHash, err
+	}
+	copy(fileHash[:], hasher.Sum(nil))
+	return fileHash, nil
+}
+
+// ImageHeadSniffBytes 图片魔数嗅探读取的文件头字节数。
+const ImageHeadSniffBytes = 512
+
+// DetectSafeUploadedImage 检测上传文件是否为安全栅格图片（jpg/png/gif/webp），返回嗅探出的真实 MIME。
+// 用于图片上传防「图片藏 JS」（存储型 XSS）：
+//   - 按文件头魔数嗅探真实类型，SVG/HTML/JS/XML 等可携带脚本的格式一律拒绝；
+//   - 声明 MIME 与真实内容不一致（如声明 image/png 实际为 SVG）同样拒绝；
+//   - ok=false 表示不通过；读取文件头失败时 err 非 nil。
+//
+// 调用方应以返回的嗅探 MIME 作为存储 mime_type 与 S3 Content-Type，避免浏览器按伪造类型解析。
+func DetectSafeUploadedImage(fileHeader *multipart.FileHeader, declaredMIME string) (string, bool, error) {
+	head, err := ReadHead(fileHeader, ImageHeadSniffBytes)
+	if err != nil {
+		return "", false, err
+	}
+	mimeType, ok := filetype.DetectSafeImageMIME(head, declaredMIME)
+	return mimeType, ok, nil
+}
+
+// ReadHead 读取上传文件头（最多 n 字节），用于魔数嗅探。
+func ReadHead(fileHeader *multipart.FileHeader, n int) ([]byte, error) {
+	src, err := fileHeader.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer src.Close()
+
+	head := make([]byte, n)
+	read, err := io.ReadFull(src, head)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	return head[:read], nil
 }
 
 // FileTypeName 将文件大类 uint8 常量转为对外字符串

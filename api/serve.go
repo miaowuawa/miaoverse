@@ -6,6 +6,7 @@ import (
 	userfeed "miaoverse/api/routers/v1/feed"
 	usermoment "miaoverse/api/routers/v1/moment"
 	usercomment "miaoverse/api/routers/v1/moment/comment"
+	usersticker "miaoverse/api/routers/v1/sticker"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -185,6 +186,72 @@ func Initial(app *fiber.App, servants *server.Servants) {
 		func(c fiber.Ctx) error {
 			return usercomment.ConversationHandler(c, servants)
 		})
+	// 获取动态一级评论分页列表（:id 为动态 id；sort=hot|time）。
+	// 屏蔽/拉黑校验与动态详情一致；评论可内嵌贴纸（[sticker:<uuid>] 标记随文本穿插展示）。
+	commentGroup.Get("/moments/:id",
+		middleware.RequireNoContentBlock(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentPathAuthor}),
+		middleware.RequireNoBlockUser(servants, middleware.BlockGuardConfig{Resolver: middleware.ResolveMomentPathAuthor, AllowSelf: true}),
+		func(c fiber.Ctx) error {
+			return usercomment.ListHandler(c, servants)
+		})
+
+	// ===== 贴纸组 /stickers（需登录 + 已绑定手机号）=====
+	// 分为「贴纸收藏夹（个人）」与「贴纸包（其他贴纸包）」两部分：
+	// 收藏夹存放本人上传（source=1，上传时自动加入）与收藏他人（source=2）的贴纸，可置顶，收藏上限 500；
+	// 贴纸包由具备评论权限的用户创建，单包上限 100 张，可整包收藏（收藏后包内容更新自动同步）。
+	// 贴纸包被封禁（sticker_pack.banned，运营处置）后，包内贴纸在所有使用处无法显示。
+	stickerGroup := v1.Group("/stickers")
+	stickerGroup.Use(middleware.RequireUser(servants, UserCheck.AccountActive(), UserCheck.PhoneBound()))
+	// 上传贴纸（multipart/form-data：file + 可选 name），单张大小从配置读取（默认 10MB）
+	stickerGroup.Post("/", middleware.RequireNotPunished(servants, consts.PermUploadFile), func(c fiber.Ctx) error {
+		return usersticker.UploadHandler(c, servants)
+	})
+	// 我的贴纸收藏夹列表（置顶优先）
+	stickerGroup.Get("/collection", func(c fiber.Ctx) error {
+		return usersticker.CollectionHandler(c, servants)
+	})
+	// 把他人贴纸添加到收藏夹（幂等）
+	stickerGroup.Post("/collection", func(c fiber.Ctx) error {
+		return usersticker.FavoriteHandler(c, servants)
+	})
+	// 从收藏夹移除收藏的贴纸（幂等）
+	stickerGroup.Delete("/collection", func(c fiber.Ctx) error {
+		return usersticker.UnfavoriteHandler(c, servants)
+	})
+	// 设置/取消收藏夹贴纸置顶（body: top 0|1）
+	stickerGroup.Patch("/:uuid/top", func(c fiber.Ctx) error {
+		return usersticker.TopHandler(c, servants)
+	})
+	// 删除本人上传的贴纸
+	stickerGroup.Delete("/:uuid", func(c fiber.Ctx) error {
+		return usersticker.DeleteHandler(c, servants)
+	})
+	// 贴纸包列表（filter=all 全部 / favorite 已整包收藏）
+	stickerGroup.Get("/packs", func(c fiber.Ctx) error {
+		return usersticker.PackListHandler(c, servants)
+	})
+	// 创建贴纸包（要求未被封禁评论权限）
+	stickerGroup.Post("/packs", middleware.RequireNotPunished(servants, consts.PermComment), func(c fiber.Ctx) error {
+		return usersticker.PackCreateHandler(c, servants)
+	})
+	// 收藏/取消收藏整个贴纸包（幂等）
+	stickerGroup.Post("/packs/favorites", func(c fiber.Ctx) error {
+		return usersticker.PackFavoriteHandler(c, servants)
+	})
+	stickerGroup.Delete("/packs/favorites", func(c fiber.Ctx) error {
+		return usersticker.PackUnfavoriteHandler(c, servants)
+	})
+	// 贴纸包详情（含包内贴纸列表）
+	stickerGroup.Get("/packs/:id", func(c fiber.Ctx) error {
+		return usersticker.PackDetailHandler(c, servants)
+	})
+	// 向自己的贴纸包添加/移出贴纸
+	stickerGroup.Post("/packs/:id/stickers", func(c fiber.Ctx) error {
+		return usersticker.PackAddStickerHandler(c, servants)
+	})
+	stickerGroup.Delete("/packs/:id/stickers/:sticker_uuid", func(c fiber.Ctx) error {
+		return usersticker.PackRemoveStickerHandler(c, servants)
+	})
 
 	// ===== 用户组 /user（需登录）=====
 	userGroup := v1.Group("/user")

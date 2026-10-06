@@ -336,6 +336,31 @@ func (d *InteractsDAO) HasLikedMomentsBatch(userID uint32, momentIDs []uint64) (
 	return result, nil
 }
 
+// HasLikedCommentsBatch 批量查询 userID 是否已点赞各评论（type=like, target_type=comment, status=normal）。
+// 一次 DISTINCT 查询，避免逐条 COUNT。
+func (d *InteractsDAO) HasLikedCommentsBatch(userID uint32, commentIDs []uint64) (map[uint64]bool, error) {
+	result := map[uint64]bool{}
+	if len(commentIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []struct {
+		TargetID uint64
+	}
+	err := d.DB.Model(&modelinteracts.Interacts{}).
+		Select("DISTINCT target_id").
+		Where("user_from = ? AND target_id IN ? AND type = ? AND target_type = ? AND status = ?",
+			userID, commentIDs, consts.InteractTypeLike, consts.InteractTargetComment, consts.InteractStatusNormal).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.TargetID] = true
+	}
+	return result, nil
+}
+
 // HasLikedArticlesBatch 批量查询 userID 是否已点赞各文章（type=like, status=normal）。
 // 注意：与现有文章详情接口（HasLikedMoment）口径一致，文章点赞记录复用 target_type=moment，
 // 不引入新的 target_type，避免与既有数据不一致。

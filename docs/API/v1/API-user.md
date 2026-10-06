@@ -702,6 +702,12 @@ curl -i -X PATCH http://localhost:3000/api/v1/user/info \
 
 上传大小由配置项 `upload.max_file_size_bytes` 控制，默认 `20971520` 字节。
 
+**图片安全校验（防「图片藏 JS」）**：当文件被标记为图片（`file_type=image` 或声明 MIME 为 `image/*`）时，服务端会按文件头魔数嗅探真实类型，**仅接受 jpg/png/gif/webp 安全栅格图片**：
+
+- SVG/HTML/JS/XML 等可内嵌脚本的格式一律拒绝（`400`）；
+- 「声明 `image/png` 实际为 SVG」等伪装上传同样拒绝；
+- 存储 `mime_type` 与 S3 `Content-Type` 使用嗅探出的真实类型，避免浏览器按伪造类型解析。
+
 #### 请求示例
 
 ```bash
@@ -737,7 +743,7 @@ curl -i -X POST http://localhost:3000/api/v1/user/files \
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 没有上传 `file` 字段或文件名无效 |
+| `400` | 没有上传 `file` 字段或文件名无效；图片未通过安全图片校验（非 jpg/png/gif/webp 或伪装上传，msg：`图片仅支持 jpg/png/gif/webp 格式，不支持 SVG 等可携带脚本的图片`） |
 | `401` | 未登录或 session 中没有 `UID` |
 | `413` | 文件超过 `upload.max_file_size_bytes` |
 | `503` | S3 未启用或文件存储服务不可用 |

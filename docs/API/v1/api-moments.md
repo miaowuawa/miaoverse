@@ -10,6 +10,7 @@
 | 编辑动态 | `PATCH /api/v1/moment/:id` | 是 |
 | 获取动态详情 | `GET /api/v1/moments/:id` | 否（未登录仅可查看公开动态） |
 | 评论动态 | `POST /api/v1/comment/moments` | 是 |
+| 获取动态评论列表 | `GET /api/v1/comment/moments/:id` | 是 |
 | 回复评论（楼中楼） | `POST /api/v1/comment/moments/:id/replies` | 是 |
 | 获取楼中楼完整对话 | `GET /api/v1/comment/moments/:id/conversation` | 是 |
 | 给评论点赞 | `POST /api/v1/comment/likes` | 是 |
@@ -320,7 +321,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 | --- | --- | --- | --- | --- |
 | `moment_id` | number | 是 | 大于 0 | 目标动态 ID |
-| `content` | string | 是 | 非空，最长 1000 字符 | 评论内容 |
+| `content` | string | 是 | 非空，最长 1000 字符 | 评论内容。可携带一个贴纸内嵌标记 `[sticker:<uuid>]` 随文字穿插展示（一条评论最多一个贴纸，规则见 `API-sticker.md`） |
 
 #### 成功响应
 
@@ -334,12 +335,31 @@ curl -i http://localhost:3000/api/v1/moments/1 \
     "id": 1,
     "user_id": 10001,
     "moment_id": 1,
-    "content": "写得好",
+    "content": "写得好 [sticker:123e4567-e89b-12d3-a456-426614174000]",
     "status": 0,
-    "created_at": "2026-06-07 12:00:00"
+    "created_at": "2026-06-07 12:00:00",
+    "author": { "id": 10001, "nickname": "要乐奈", "username": "rana_mygo" },
+    "likes": 0,
+    "is_liked": false,
+    "sticker": {
+      "uuid": "123e4567-e89b-12d3-a456-426614174000",
+      "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
+      "name": "好耶",
+      "hidden": false
+    }
   }
 }
 ```
+
+评论响应字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `content` | string | 评论原文，贴纸内嵌标记 `[sticker:<uuid>]` 保留在文本中，前端按标记位置穿插展示贴纸 |
+| `author` | object | 评论作者用户信息（已注销账号的展示字段统一打码） |
+| `likes` | number | 点赞数 |
+| `is_liked` | boolean | 当前登录用户是否已点赞 |
+| `sticker` | object | 评论内嵌贴纸展示信息，无贴纸时不返回。`hidden=true` 表示贴纸无法显示（所在贴纸包被封禁或贴纸已删除），前端在评论下灰字提示「部分贴纸未显示」。贴纸图片用 `file_uuid` 经临时链接接口换取 |
 
 #### 评论权限规则
 
@@ -352,10 +372,68 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 请求体不是 JSON、`moment_id` 为 0、`content` 为空或超长 |
+| `400` | 请求体不是 JSON、`moment_id` 为 0、`content` 为空或超长；贴纸标记超过一个（`贴纸使用错误，一条评论最多使用一个贴纸`） |
 | `401` | 未登录或 session 中没有 `UID` |
-| `403` | 评论权限封禁（`code` 为 `40302`）；拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`） |
-| `404` | 动态不存在或已删除 |
+| `403` | 评论权限封禁（`code` 为 `40302`）；拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`）；使用贴纸但未绑定手机号；贴纸不在可用集合（`只能使用自己上传或已收藏的贴纸哦～`）；贴纸所在贴纸包被封禁 |
+| `404` | 动态不存在或已删除；使用的贴纸不存在或已删除 |
+| `451` | 动态被屏蔽（`status=4`），body 中 `code` 为 `45101` |
+| `500` | 数据库异常 |
+
+## 获取动态评论列表
+
+### `GET /api/v1/comment/moments/:id`
+
+获取动态的一级评论分页列表（`:id` 为动态 id）。需要登录；内容屏蔽与拉黑校验与动态详情一致。
+
+#### 请求参数
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `offset` | number | 否 | 偏移量，默认 `0` |
+| `limit` | number | 否 | 每页数量，默认 `20`，最大 `100` |
+| `sort` | string | 否 | `hot`（默认，按点赞数倒序）/ `time`（按时间倒序） |
+
+#### 成功响应
+
+状态码：`200 OK`
+
+```json
+{
+  "code": 200,
+  "msg": "获取成功",
+  "count": 42,
+  "comments": [
+    {
+      "id": 1,
+      "user_id": 10001,
+      "moment_id": 1,
+      "content": "写得好 [sticker:123e4567-e89b-12d3-a456-426614174000]",
+      "status": 0,
+      "created_at": "2026-06-07 12:00:00",
+      "author": { "id": 10001, "nickname": "要乐奈", "username": "rana_mygo" },
+      "likes": 12,
+      "is_liked": false,
+      "sticker": {
+        "uuid": "123e4567-e89b-12d3-a456-426614174000",
+        "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
+        "name": "好耶",
+        "hidden": false
+      }
+    }
+  ]
+}
+```
+
+字段说明：与评论接口的 `comment` 对象一致；`sticker.hidden=true` 时前端隐藏贴纸并在该评论下灰字提示「部分贴纸未显示」。
+
+#### 可能的错误
+
+| 状态码 | 场景 |
+| --- | --- |
+| `400` | `:id` 非法、`offset`/`limit`/`sort` 参数非法 |
+| `401` | 未登录 |
+| `403` | 与动态作者存在拉黑/被拉黑关系（`code` 为 `40301`） |
+| `404` | 动态不存在、已删除或不可见 |
 | `451` | 动态被屏蔽（`status=4`），body 中 `code` 为 `45101` |
 | `500` | 数据库异常 |
 
@@ -393,7 +471,7 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 
 | 字段 | 类型 | 必填 | 校验规则 | 说明 |
 | --- | --- | --- | --- | --- |
-| `content` | string | 是 | 非空，最长 1000 字符 | 回复内容 |
+| `content` | string | 是 | 非空，最长 1000 字符 | 回复内容。可携带一个贴纸内嵌标记 `[sticker:<uuid>]`（规则与评论一致，见 `API-sticker.md`） |
 
 #### 成功响应
 
@@ -411,7 +489,13 @@ curl -i http://localhost:3000/api/v1/moments/1 \
     "reply_to_user_id": 10001,
     "content": "同意",
     "status": 0,
-    "created_at": "2026-06-07 12:01:00"
+    "created_at": "2026-06-07 12:01:00",
+    "sticker": {
+      "uuid": "123e4567-e89b-12d3-a456-426614174000",
+      "file_uuid": "0f9c2b31-6a4d-4c39-9c0a-1b2f3d4e5f60",
+      "name": "好耶",
+      "hidden": false
+    }
   }
 }
 ```
@@ -423,14 +507,16 @@ curl -i http://localhost:3000/api/v1/moments/1 \
 | `reply_to_id` | number | 被回复的评论 id |
 | `reply_to_user_id` | number | 被回复的评论作者 id |
 | `moment_id` | number | 所属动态 id |
+| `sticker` | object | 回复内嵌贴纸展示信息（语义与评论一致），无贴纸时不返回 |
 
 #### 可能的错误
 
 | 状态码 | 场景 |
 | --- | --- |
-| `400` | 请求体不是 JSON、`content` 为空或超长、`:id` 非法或评论不存在/已删除 |
+| `400` | 请求体不是 JSON、`content` 为空或超长、`:id` 非法或评论不存在/已删除；贴纸标记超过一个 |
 | `401` | 未登录或 session 中没有 `UID` |
-| `403` | 评论权限封禁（`code` 为 `40302`）；与动态作者或被回复评论作者存在拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`） |
+| `403` | 评论权限封禁（`code` 为 `40302`）；与动态作者或被回复评论作者存在拉黑/被拉黑关系（`code` 为 `40301`）；评论权限不允许（普通 `403`）；使用贴纸但未绑定手机号/贴纸不可用/贴纸包被封禁 |
+| `404` | 使用的贴纸不存在或已删除 |
 | `451` | 所属动态或被回复评论被屏蔽（`status=4`），body 中 `code` 为 `45101` |
 | `500` | 数据库异常 |
 

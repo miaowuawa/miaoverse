@@ -67,7 +67,8 @@ type AppConfig struct {
 		TempLinkExpireSeconds      int    `yaml:"temp_link_expire_seconds"`
 	} `yaml:"s3"`
 	Upload struct {
-		MaxFileSizeBytes int64 `yaml:"max_file_size_bytes"`
+		MaxFileSizeBytes    int64 `yaml:"max_file_size_bytes"`
+		MaxStickerSizeBytes int64 `yaml:"max_sticker_size_bytes"`
 	} `yaml:"upload"`
 	Cache struct {
 		DB int `yaml:"dbnum"`

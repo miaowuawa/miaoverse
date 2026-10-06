@@ -4,6 +4,7 @@ import (
 	"miaoverse/dao/article"
 	"miaoverse/dao/content"
 	"miaoverse/dao/interacts"
+	"miaoverse/dao/sticker"
 	"miaoverse/dao/user"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -28,4 +29,9 @@ func NewInteractsDao(db *gorm.DB) *interacts.InteractsDAO {
 // NewArticleDao 创建文章域DAO实例（跨 MySQL + MongoDB）
 func NewArticleDao(db *gorm.DB, mongoDB *mongo.Database) *article.ArticleDAO {
 	return &article.ArticleDAO{DB: db, Mongo: mongoDB}
+}
+
+// NewStickerDao 创建贴纸域DAO实例
+func NewStickerDao(db *gorm.DB) *sticker.StickerDAO {
+	return &sticker.StickerDAO{DB: db}
 }

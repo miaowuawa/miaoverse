@@ -21,3 +21,9 @@ const (
 	MaxConversationDepth = 10   // 楼中楼对话最大收集层数（一般 2-3 层即可覆盖）
 	CommentChainMaxDepth = 20   // 楼中楼评论链上溯最大深度，防止脏数据导致死循环
 )
+
+// 评论列表排序方式。
+const (
+	CommentSortHot  = "hot"  // 按热度（点赞数倒序）
+	CommentSortTime = "time" // 按时间（发布时间倒序）
+)

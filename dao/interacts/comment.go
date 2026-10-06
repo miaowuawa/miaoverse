@@ -85,16 +85,16 @@ func (d *InteractsDAO) CreateReplyCommentAndInteract(comment modelinteracts.Comm
 func (d *InteractsDAO) QueryCommentRepliesByRoot(rootID uint64, maxDepth int) ([]modelinteracts.Comment, error) {
 	const sql = `
 WITH RECURSIVE reply_tree AS (
-    SELECT id, user_id, target_id, target_type, content, status, created_at, updated_at, 0 AS depth
+    SELECT id, user_id, target_id, target_type, content, sticker_uuid, status, created_at, updated_at, 0 AS depth
     FROM comment
     WHERE id = ? AND status = ?
     UNION ALL
-    SELECT c.id, c.user_id, c.target_id, c.target_type, c.content, c.status, c.created_at, c.updated_at, rt.depth + 1
+    SELECT c.id, c.user_id, c.target_id, c.target_type, c.content, c.sticker_uuid, c.status, c.created_at, c.updated_at, rt.depth + 1
     FROM comment c
     INNER JOIN reply_tree rt ON c.target_id = rt.id
     WHERE c.target_type = ? AND c.status = ? AND rt.depth < ?
 )
-SELECT id, user_id, target_id, target_type, content, status, created_at, updated_at
+SELECT id, user_id, target_id, target_type, content, sticker_uuid, status, created_at, updated_at
 FROM reply_tree
 WHERE id <> ?
 ORDER BY id ASC`
@@ -112,6 +112,43 @@ ORDER BY id ASC`
 		return nil, err
 	}
 	return list, nil
+}
+
+// QueryMomentComments 分页查询动态一级评论（target_type=moment, status=normal）。
+// sort 排序方式：consts.CommentSortHot（默认，按点赞数倒序，同分按 id 倒序）/ consts.CommentSortTime（按时间倒序）。
+func (d *InteractsDAO) QueryMomentComments(momentID uint64, offset, limit int, sort string) ([]modelinteracts.Comment, error) {
+	order := "c.id DESC"
+	if sort == consts.CommentSortHot {
+		order = "IFNULL(cic.like_count, 0) DESC, c.id DESC"
+	}
+
+	var list []modelinteracts.Comment
+	err := d.DB.Table("comment c").
+		Select("c.*").
+		Joins("LEFT JOIN comment_interact_count cic ON cic.comment_id = c.id").
+		Where("c.target_id = ? AND c.target_type = ? AND c.status = ?",
+			momentID, consts.CommentTargetMoment, consts.CommentStatusNormal).
+		Order(order).
+		Offset(offset).Limit(limit).
+		Scan(&list).Error
+	return list, err
+}
+
+// QueryCommentInteractCountsBatch 批量查询评论点赞计数（一次 IN 查询）。
+// 返回 commentID → 点赞数；无计数行的评论按 0 处理（不出现在结果中）。
+func (d *InteractsDAO) QueryCommentInteractCountsBatch(commentIDs []uint64) (map[uint64]uint32, error) {
+	result := map[uint64]uint32{}
+	if len(commentIDs) == 0 {
+		return result, nil
+	}
+	var rows []modelinteracts.CommentInteractCount
+	if err := d.DB.Where("comment_id IN ?", commentIDs).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.CommentID] = row.LikeCount
+	}
+	return result, nil
 }
 
 // CountMomentCommentsReal 统计动态实际评论数（target_type=moment, status=normal）。
